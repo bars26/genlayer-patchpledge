@@ -28,6 +28,7 @@ Every ruling stores a plain-English **reason** built only from facts all validat
 
 **Live app:** [patchpledge-bars26.vercel.app](https://patchpledge-bars26.vercel.app). Browsing needs no wallet. Writes need
 MetaMask on GenLayer Studio (chain 61999); the **Test GEN** button funds your wallet from the Studio faucet.
+**Demo video (30 s):** [youtu.be/rspweMSn_mA](https://youtu.be/rspweMSn_mA).
 **Contract:** [`0x3d85a84149c05EBc16fD11A358f26473901afbB8`](https://explorer-studio.genlayer.com/address/0x3d85a84149c05EBc16fD11A358f26473901afbB8) on GenLayer Studio.
 
 ## Verified live, on real advisories
