@@ -1,6 +1,7 @@
 "use client";
 
 import { createClient } from "genlayer-js";
+import { DEFAULT_CONTRACT_ADDRESS } from "../config";
 import { studionet } from "genlayer-js/chains";
 import { createWalletClient, custom, type WalletClient } from "viem";
 
@@ -47,12 +48,7 @@ export function getStudioUrl(): string {
  * Get the contract address from environment variables
  */
 export function getContractAddress(): string {
-  const address = process.env.NEXT_PUBLIC_CONTRACT_ADDRESS;
-  if (!address) {
-    // Return empty string during build, error will be shown in UI during runtime
-    return "";
-  }
-  return address;
+  return process.env.NEXT_PUBLIC_CONTRACT_ADDRESS || DEFAULT_CONTRACT_ADDRESS;
 }
 
 /**

@@ -1,0 +1,286 @@
+{
+  "contract": "0x480A010a26DabEbB1963b5320576A7cEbCD3454e",
+  "accounts": {
+    "pledger": "0xCddEC636F8561977C881DD07Dd38D8c404855c54",
+    "reporter": "0xD7200Cd41f13Ae9539e53446d9CeF340421DDaF0",
+    "fund": "0x3404417c59826a464DbE13eB259cA91e06523b4C",
+    "bystander": "0x7a1a94E85416F7aCe9B9F2B60489F12AbB260330"
+  },
+  "pledges": [
+    "pledge_0",
+    "pledge_1",
+    "pledge_2",
+    "pledge_3",
+    "pledge_4"
+  ],
+  "claims": [
+    "claim_0",
+    "claim_1",
+    "claim_2",
+    "claim_3",
+    "claim_4"
+  ],
+  "log": [
+    {
+      "who": "pledger",
+      "call": "create_pledge(\"npm\", \"next\", \"CRITICAL\", 14, \"\", 2 GEN, \"0x3404417c59826a464DbE13eB259cA91e06523, \"2026-09-01\", \"2027-08-31\")",
+      "value": "6",
+      "hash": "0x45d65faec97ee734d7d327b78be5cc865647e84ed98edc4e2ba62d6539a62138",
+      "status": "ACCEPTED",
+      "exec": "SUCCESS",
+      "returned": "pledge_0"
+    },
+    {
+      "who": "reporter",
+      "call": "file_breach(\"pledge_0\", \"GHSA-cjq9-62q9-8jv4\")",
+      "value": "1",
+      "hash": "0x2be9e01f980882a26d9cd4e6b6d4ce474c700ac546e37b3edcea44488fb0a01d",
+      "status": "ACCEPTED",
+      "exec": "SUCCESS",
+      "returned": "REFUNDED: A claim on this pledge stakes exactly 200000000000000000 wei (10% of the payout)"
+    },
+    {
+      "who": "reporter",
+      "call": "file_breach(\"pledge_0\", \"GHSA-cjq9-62q9-8jv4\")",
+      "value": "0.2",
+      "hash": "0x4425a9c392ce6eb071a79ce37e597743d16b6d768a45126d152394092c4eb766",
+      "status": "ACCEPTED",
+      "exec": "SUCCESS",
+      "returned": "claim_0"
+    },
+    {
+      "who": "reporter",
+      "call": "settle(\"claim_0\")",
+      "value": "0",
+      "hash": "0xb1c67cbb46e5b40dee8c936f0f34114ab38a1761d34893421df29ba0b6808c16",
+      "status": "ACCEPTED",
+      "exec": "SUCCESS",
+      "returned": "stake_to_bond"
+    },
+    {
+      "who": "reporter",
+      "call": "file_breach(\"pledge_0\", \"GHSA-2xp9-vwfh-vxw4\")",
+      "value": "0.2",
+      "hash": "0xe8039aeeb7eaac91ef806f7c6128991f1ebf2675f1a26694270a0cbd7ea96d01",
+      "status": "ACCEPTED",
+      "exec": "SUCCESS",
+      "returned": "claim_1"
+    },
+    {
+      "who": "pledger",
+      "call": "settle(\"claim_1\")",
+      "value": "0",
+      "hash": "0x846216d04f5a176a548fa12ae08ef4b00a90fc702f383ccd76b1c019fce537ab",
+      "status": "ACCEPTED",
+      "exec": "ERROR",
+      "refused": "The response window is still open; only the claimant can accept early"
+    },
+    {
+      "who": "reporter",
+      "call": "contest(\"claim_1\", \"\")",
+      "value": "0",
+      "hash": "0x3514347779dc8938171970e9efa222cde577d01119da68e7995b3529071defef",
+      "status": "ACCEPTED",
+      "exec": "SUCCESS",
+      "returned": "KEPT"
+    },
+    {
+      "who": "reporter",
+      "call": "contest(\"claim_1\", \"\")",
+      "value": "0",
+      "hash": "0xf0db30681b67c66b6fb80e289ce6c77bf88c01b6b9ca8cce7d0a6ba00ec9ffc8",
+      "status": "ACCEPTED",
+      "exec": "ERROR",
+      "refused": "The claimant has already contested this claim"
+    },
+    {
+      "who": "reporter",
+      "call": "settle(\"claim_1\")",
+      "value": "0",
+      "hash": "0x38afa7a6af4f991279b25179424c62f7723a203fe5aede4dfb9ac1e16abdecba",
+      "status": "ACCEPTED",
+      "exec": "SUCCESS",
+      "returned": "stake_to_bond"
+    },
+    {
+      "who": "pledger",
+      "call": "withdraw(\"pledge_0\")",
+      "value": "0",
+      "hash": "0x83ef8520eb6bc1376d2fc9a996eae66954d7c2ecfa08530603fc34107a26f8ae",
+      "status": "ACCEPTED",
+      "exec": "ERROR",
+      "refused": "The bond stays until 2027-09-15: advisories published up to the coverage end still get their full 14-day deadline"
+    },
+    {
+      "who": "pledger",
+      "call": "create_pledge(\"npm\", \"eazy-logger\", \"HIGH\", 30, \"\", 3 GEN, \"0x3404417c59826a464DbE13eB259cA91e06523, \"2025-01-01\", \"2026-12-31\")",
+      "value": "6",
+      "hash": "0xf7f39912af80cecef1b5a78536cb8047ba54e1b19fbfda9dc91e79a52a52e4f4",
+      "status": "ACCEPTED",
+      "exec": "SUCCESS",
+      "returned": "pledge_1"
+    },
+    {
+      "who": "reporter",
+      "call": "file_breach(\"pledge_1\", \"GHSA-r7jx-5m6m-cpg9\")",
+      "value": "0.3",
+      "hash": "0xeeb89a3f62f2cbf6fa51fca5ac8bc8287753709c06d9242920787b2a5dfd2799",
+      "status": "ACCEPTED",
+      "exec": "SUCCESS",
+      "returned": "claim_2"
+    },
+    {
+      "who": "reporter",
+      "call": "settle(\"claim_2\")",
+      "value": "0",
+      "hash": "0x67e6513ad1449b99310cd198c99c1a3a4aaa509ea864245794bcb0e750d8538d",
+      "status": "ACCEPTED",
+      "exec": "ERROR",
+      "refused": "The response window is still open; only the pledger can concede early"
+    },
+    {
+      "who": "fund",
+      "call": "settle(\"claim_2\")",
+      "value": "0",
+      "hash": "0x784150f781b8093693baba45327783494b14a834cf097db8f61f8ac62a9f7d2f",
+      "status": "ACCEPTED",
+      "exec": "ERROR",
+      "refused": "The response window is still open; only the pledger can concede early"
+    },
+    {
+      "who": "pledger",
+      "call": "settle(\"claim_2\")",
+      "value": "0",
+      "hash": "0xab7eab901dbd0364a3b1557e6688b36acf822cebab442d7674b9b6de43527759",
+      "status": "ACCEPTED",
+      "exec": "SUCCESS",
+      "returned": "paid"
+    },
+    {
+      "who": "reporter",
+      "call": "file_breach(\"pledge_1\", \"GHSA-r7jx-5m6m-cpg9\")",
+      "value": "0.3",
+      "hash": "0x7c5d5ba071e75a9ec928015a34db3792e39ce6bb4fbac4a482937ada59afb12f",
+      "status": "ACCEPTED",
+      "exec": "SUCCESS",
+      "returned": "REFUNDED: This advisory has already been paid from this pledge"
+    },
+    {
+      "who": "pledger",
+      "call": "create_pledge(\"npm\", \"extract-zip\", \"HIGH\", 30, \"Covers arbitrary code execution, file w, 3 GEN, \"0x3404417c59826a464DbE13eB259cA91e06523, \"2026-01-01\", \"2027-06-30\")",
+      "value": "6",
+      "hash": "0x62878a8644e73e1b9837aef86945a55d2412da64c340087461bb74c289b07774",
+      "status": "ACCEPTED",
+      "exec": "SUCCESS",
+      "returned": "pledge_2"
+    },
+    {
+      "who": "reporter",
+      "call": "file_breach(\"pledge_2\", \"GHSA-7pqw-9j4j-h8q3\")",
+      "value": "0.3",
+      "hash": "0x417c1719cb65c7f8df3933a50207144aadfc36e4f4805746047f9ad83bf3426b",
+      "status": "ACCEPTED",
+      "exec": "SUCCESS",
+      "returned": "claim_3"
+    },
+    {
+      "who": "pledger",
+      "call": "contest(\"claim_3\", \"https://raw.githubusercontent.com/max-m)",
+      "value": "0",
+      "hash": "0x946e106af963d359ddb8b2951eff18c20f03a8457749ba3f6ae6951b08b589c3",
+      "status": "ACCEPTED",
+      "exec": "SUCCESS",
+      "returned": "BREACHED"
+    },
+    {
+      "who": "pledger",
+      "call": "contest(\"claim_3\", \"\")",
+      "value": "0",
+      "hash": "0x52c8646482e13dc4a76444bacb84821dfc62cca59e9528e31e3ae2d5cabda06d",
+      "status": "ACCEPTED",
+      "exec": "ERROR",
+      "refused": "The pledger has already contested this claim"
+    },
+    {
+      "who": "pledger",
+      "call": "create_pledge(\"npm\", \"open-webui\", \"HIGH\", 30, \"Covers arbitrary code execution, file w, 2 GEN, \"0x3404417c59826a464DbE13eB259cA91e06523, \"2025-01-01\", \"2026-12-31\")",
+      "value": "4",
+      "hash": "0xd0a3f2666f2637e650cc77d3312b0e6adadab61f3c2dd81508ac276795ae0978",
+      "status": "ACCEPTED",
+      "exec": "SUCCESS",
+      "returned": "pledge_3"
+    },
+    {
+      "who": "reporter",
+      "call": "file_breach(\"pledge_3\", \"GHSA-5ccf-884p-4jjq\")",
+      "value": "0.2",
+      "hash": "0x99b2d6a0d1107c043c8ad49f4d9b9e6ae8ee523dd4413ffe5327408433346e6e",
+      "status": "ACCEPTED",
+      "exec": "SUCCESS",
+      "returned": "claim_4"
+    },
+    {
+      "who": "pledger",
+      "call": "contest(\"claim_4\", \"\")",
+      "value": "0",
+      "hash": "0x668e3384d909a721afdc71d8d58345af1a99f0c246b6d60da9049ae974561817",
+      "status": "ACCEPTED",
+      "exec": "ERROR",
+      "refused": "Only the claimant can contest a ruling that pays nothing"
+    },
+    {
+      "who": "reporter",
+      "call": "contest(\"claim_4\", \"\")",
+      "value": "0",
+      "hash": "0xcf969369f2c5b30ffa5ca9cd1bf1b73c69c0977b9df20f0164cc416a376e2067",
+      "status": "ACCEPTED",
+      "exec": "SUCCESS",
+      "returned": "EXCUSED"
+    },
+    {
+      "who": "pledger",
+      "call": "create_pledge(\"npm\", \"@budibase/server\", \"HIGH\", 90, \"\", 2 GEN, \"0x3404417c59826a464DbE13eB259cA91e06523, \"2026-01-01\", \"2027-12-31\")",
+      "value": "4",
+      "hash": "0xde90ffa4b9622b7596ddfbc3f9a03a10c3e1fe87111edf726e444bc83ee34b08",
+      "status": "ACCEPTED",
+      "exec": "SUCCESS",
+      "returned": "pledge_4"
+    },
+    {
+      "who": "reporter",
+      "call": "file_breach(\"pledge_4\", \"GHSA-6x9p-4r67-5gjx\")",
+      "value": "0.2",
+      "hash": "0x48efed6d92e6f60af674240864602d52664e1b39f6b7fe163e17d6a8b35aeef0",
+      "status": "ACCEPTED",
+      "exec": "SUCCESS",
+      "returned": "REFUNDED: GHSA-6x9p-4r67-5gjx was published on 2026-08-26; the 90-day deadline (2026-11-24) has not passed and no fix is listed yet."
+    },
+    {
+      "who": "bystander",
+      "call": "settle(\"claim_3\")",
+      "value": "0",
+      "hash": "0xe7bdbf2620d421d18612bf8ccf97e58bf6572e6e1654da5632cb4e3426ec0628",
+      "status": "ACCEPTED",
+      "exec": "ERROR",
+      "refused": "The response window is still open; only the pledger can concede early"
+    },
+    {
+      "who": "bystander",
+      "call": "settle(\"claim_3\")",
+      "value": "0",
+      "hash": "0x868fe38b3ebd94e8041921e51b8bdff63c411816df0333bc3d5edcbcaed4780b",
+      "status": "ACCEPTED",
+      "exec": "SUCCESS",
+      "returned": "paid"
+    },
+    {
+      "who": "bystander",
+      "call": "settle(\"claim_4\")",
+      "value": "0",
+      "hash": "0x3c618d027e4853b109dcebe49088b9a959642e9136d5abecfbac7ea834be5d8e",
+      "status": "ACCEPTED",
+      "exec": "SUCCESS",
+      "returned": "stake_to_bond"
+    }
+  ]
+}

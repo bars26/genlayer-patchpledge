@@ -1,5 +1,6 @@
 import { createClient } from "genlayer-js";
 import { studionet } from "genlayer-js/chains";
+import { DEFAULT_CONTRACT_ADDRESS } from "@/lib/config";
 
 /**
  * Server-side snapshot of every pledge and claim, cached at the CDN.
@@ -12,7 +13,7 @@ import { studionet } from "genlayer-js/chains";
 
 export const dynamic = "force-dynamic";
 
-const CONTRACT = process.env.NEXT_PUBLIC_CONTRACT_ADDRESS as `0x${string}`;
+const CONTRACT = (process.env.NEXT_PUBLIC_CONTRACT_ADDRESS || DEFAULT_CONTRACT_ADDRESS) as `0x${string}`;
 const RPC = process.env.NEXT_PUBLIC_GENLAYER_RPC_URL || "https://studio.genlayer.com/api";
 
 type Snapshot = { pledges: unknown[]; claims: unknown[]; fetchedAt: string };
