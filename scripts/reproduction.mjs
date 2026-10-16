@@ -25,6 +25,15 @@ for (const id of run.pledges) {
     `${id} ${field(p, "ecosystem")}:${String(field(p, "package")).padEnd(17)} bond ${fmt(field(p, "bond")).padStart(5)} GEN  paid ${fmt(field(p, "total_paid"))} GEN  kept ${field(p, "n_kept")}  breached ${field(p, "n_breached")}  other ${field(p, "n_other")}  open ${field(p, "pending")}`
   );
 }
+const balances = [];
+for (const [k, a] of Object.entries(run.accounts)) {
+  const res = await fetch("https://studio.genlayer.com/api", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "eth_getBalance", params: [a, "latest"] }),
+  }).then((r) => r.json());
+  balances.push(`${k.padEnd(10)} ${fmt(BigInt(res.result))} GEN`);
+}
 const tx = (h) => `[\`${h.slice(0, 10)}…\`](https://explorer-studio.genlayer.com/tx/${h})`;
 const esc = (s) => String(s ?? "").replace(/\|/g, "\\|").replace(/\n/g, " ");
 
@@ -59,6 +68,14 @@ ${rulings.join("\n")}
 
 \`\`\`
 ${run.summary.join("\n")}
+\`\`\`
+
+Wallet balances after finalization (funded with pledger 100, reporter 20, fund 1, bystander 1 GEN): the pledger bonded
+26 GEN in total, the fund received 2.7 GEN from each of the two breaches, and the reporter's three lost stakes (0.2 each,
+on rulings that paid nothing) equal its two reporter rewards (0.3 + 0.3).
+
+\`\`\`
+${balances.join("\n")}
 \`\`\`
 
 ## Every transaction
