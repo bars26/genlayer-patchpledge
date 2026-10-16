@@ -42,6 +42,23 @@ const rows = run.log.map((r) => {
   return `| ${r.who} | \`${esc(r.call)}\` | ${r.value === "0" ? "" : r.value} | ${r.status} | ${r.exec} | ${esc(result).slice(0, 260)} | ${tx(r.hash)} |`;
 });
 
+let uiTest = "";
+try {
+  const ui = JSON.parse(readFileSync(new URL("../docs/ui-test.json", import.meta.url), "utf8"));
+  uiTest = `## Wallet test from the live app
+
+${ui.note} Wallet \`${ui.wallet}\`. All three transactions are FINALIZED with execution result SUCCESS.
+
+| Step | GEN sent | Result | Tx |
+|---|---|---|---|
+${ui.steps.map(([step, value, result, hash]) => `| ${esc(step)} | ${value} | ${esc(result)} | ${tx(hash)} |`).join("\n")}
+
+On-chain reason for claim_5: ${ui.why}
+`;
+} catch {
+  // no UI test recorded
+}
+
 const rulings = run.rulings.map((c) => `| ${c.id} | ${c.advisory} | **${c.verdict}** (${c.code}) | ${esc(c.why)} | ${c.steps} |`);
 
 const doc = `# Reproduction log
@@ -78,6 +95,7 @@ on rulings that paid nothing) equal its two reporter rewards (0.3 + 0.3).
 ${balances.join("\n")}
 \`\`\`
 
+${uiTest}
 ## Every transaction
 
 A refused call is still ACCEPTED by consensus; the contract outcome is the \`exec\` column (\`ERROR\` = the contract raised,

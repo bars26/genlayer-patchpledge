@@ -43,6 +43,18 @@ fund       6.40 GEN
 bystander  1.00 GEN
 ```
 
+## Wallet test from the live app
+
+MetaMask test from the production frontend (patchpledge-bars26.vercel.app), following the README steps: one wallet as pledger, beneficiary and reporter. Wallet `0x4f80b5c475fced34fc9a07ffccf39e1adc1406bf`. All three transactions are FINALIZED with execution result SUCCESS.
+
+| Step | GEN sent | Result | Tx |
+|---|---|---|---|
+| Make a pledge: npm bigint-buffer, HIGH, 30 days, payout 1, bond 2, from 2025-01-01 | 2 GEN | pledge_5 | [`0xc411f37e…`](https://explorer-studio.genlayer.com/tx/0xc411f37ea0dff03fe947634d6f7a6f503990f483a35a16073cf8a4437a18b83e) |
+| Report a missed deadline: GHSA-3gc7-fjrx-p6mg | 0.1 GEN | claim_5: BREACHED (no_fix) | [`0x4251da5c…`](https://explorer-studio.genlayer.com/tx/0x4251da5c54755b617055de86806d74f104e934cab199e0816c0a6a8b3e434dca) |
+| Concede and pay now (as the pledger) |  | paid: 0.9 GEN to the beneficiary, 0.1 GEN + stake to the reporter | [`0x3840f53f…`](https://explorer-studio.genlayer.com/tx/0x3840f53fe18f58a16fed78f53247a02e7a1cd5619ea309a14523b985d6b11ecd) |
+
+On-chain reason for claim_5: GHSA-3gc7-fjrx-p6mg was published on 2025-04-04. The 30-day deadline (2025-05-04) has passed and no fixed version of npm:bigint-buffer is listed.
+
 ## Every transaction
 
 A refused call is still ACCEPTED by consensus; the contract outcome is the `exec` column (`ERROR` = the contract raised,
