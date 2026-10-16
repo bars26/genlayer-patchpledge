@@ -64,7 +64,7 @@ export function PledgeCard({ pledge, claims }: { pledge: Pledge; claims: Claim[]
       </div>
 
       <div className="flex flex-wrap items-center gap-2">
-        {active && wei(pledge.bond) > 0n && <FileClaimModal pledge={pledge} />}
+        {active && wei(pledge.bond) > 0n && <FileClaimModal pledge={pledge} claims={claims} />}
         {isPledger && active && (
           <>
             <Input value={topUp} onChange={(e) => setTopUp(e.target.value)} placeholder="GEN" className="h-8 w-20 text-xs" />

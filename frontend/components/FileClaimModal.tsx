@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { FileWarning, Loader2, Search } from "lucide-react";
-import { CODE_LABEL, GHSA_RE, formatGen, stakeFor, type Pledge, type Verdict } from "@/lib/contracts/types";
+import { CODE_LABEL, GHSA_RE, formatGen, parseJson, stakeFor, type Claim, type Pledge, type Verdict } from "@/lib/contracts/types";
 import { usePledgeWrite } from "@/lib/hooks/usePatchPledge";
 import { useWallet } from "@/lib/genlayer/wallet";
 import { VerdictBadge } from "./VerdictBadge";
@@ -21,7 +21,7 @@ type Preview = {
 };
 
 /** Report a missed deadline: preview the ruling from public data first, then stake and file. */
-export function FileClaimModal({ pledge }: { pledge: Pledge }) {
+export function FileClaimModal({ pledge, claims }: { pledge: Pledge; claims: Claim[] }) {
   const { isConnected } = useWallet();
   const { writeAsync, pending } = usePledgeWrite();
   const [open, setOpen] = useState(false);
@@ -31,6 +31,10 @@ export function FileClaimModal({ pledge }: { pledge: Pledge }) {
   const id = advisory.trim();
   const valid = GHSA_RE.test(id);
   const stake = stakeFor(pledge);
+  // The contract refunds these two cases; say so before anyone stakes.
+  const alreadyPaid = parseJson<string[]>(pledge.paid_json, []).includes(id);
+  const openClaim = claims.find((c) => c.state === "pending" && c.advisory === id);
+  const blocked = alreadyPaid ? "This advisory has already been paid from this pledge; filing it again would be refunded." : openClaim ? `${openClaim.id} is already open for this advisory; you can follow it on this card.` : "";
 
   const check = async () => {
     setChecking(true);
@@ -95,6 +99,7 @@ export function FileClaimModal({ pledge }: { pledge: Pledge }) {
               </Button>
             </div>
             {!valid && id && <p className="text-xs text-destructive">That is not a GitHub advisory id. Find it on github.com/advisories or osv.dev.</p>}
+            {valid && blocked && <p className="text-xs text-[#B45309]">{blocked}</p>}
           </div>
 
           {preview && (
@@ -125,7 +130,7 @@ export function FileClaimModal({ pledge }: { pledge: Pledge }) {
             </div>
           )}
 
-          <Button className="w-full" onClick={file} disabled={!isConnected || !valid || pending === `file:${pledge.id}` || notDue}>
+          <Button className="w-full" onClick={file} disabled={!isConnected || !valid || !!blocked || pending === `file:${pledge.id}` || notDue}>
             {pending === `file:${pledge.id}` && <Loader2 className="w-4 h-4 animate-spin" />}
             {isConnected ? `Stake ${formatGen(stake)} GEN and file` : "Connect a wallet to file"}
           </Button>
