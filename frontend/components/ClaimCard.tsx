@@ -83,7 +83,7 @@ export function ClaimCard({ claim, pledge }: { claim: Claim; pledge: Pledge }) {
           <div><dt className="text-muted-foreground">Severity</dt><dd className="mono">{f.severity || "—"} (floor {f.min_severity})</dd></div>
           <div><dt className="text-muted-foreground">Published (OSV)</dt><dd className="mono">{day(f.published)}</dd></div>
           <div><dt className="text-muted-foreground">Deadline</dt><dd className="mono">{day(f.deadline)} ({f.sla_days} days)</dd></div>
-          <div><dt className="text-muted-foreground">Fixed versions</dt><dd className="mono">{f.fixed_versions?.length ? f.fixed_versions.join(", ") : "none listed"}</dd></div>
+          <div><dt className="text-muted-foreground">Fixed versions</dt><dd className="mono">{f.fixed_versions?.length ? f.fixed_versions.join(", ") + ((f.fixed_count ?? 0) > f.fixed_versions.length ? ` (+${(f.fixed_count ?? 0) - f.fixed_versions.length} more, all checked)` : "") : "none listed"}</dd></div>
           <div><dt className="text-muted-foreground">First fix released</dt><dd className="mono">{f.first_fix ? `${f.first_fix} on ${day(f.first_fix_at)}` : "—"}</dd></div>
           <div><dt className="text-muted-foreground">Scope check</dt><dd className="mono">{f.scope_answer || "not needed"}</dd></div>
         </dl>

@@ -47,7 +47,7 @@ try {
   const ui = JSON.parse(readFileSync(new URL("../docs/ui-test.json", import.meta.url), "utf8"));
   uiTest = `## Wallet test from the live app
 
-${ui.note} Wallet \`${ui.wallet}\`. All three transactions are FINALIZED with execution result SUCCESS.
+${ui.note} Wallet \`${ui.wallet}\`. All three transactions are FINALIZED with execution result SUCCESS.${ui.contract ? "" : " (Transaction links point at that deployment.)"}
 
 | Step | GEN sent | Result | Tx |
 |---|---|---|---|
@@ -88,8 +88,8 @@ ${run.summary.join("\n")}
 \`\`\`
 
 Wallet balances after finalization (funded with pledger 100, reporter 20, fund 1, bystander 1 GEN): the pledger bonded
-26 GEN in total, the fund received 2.7 GEN from each of the two breaches, and the reporter's three lost stakes (0.2 each,
-on rulings that paid nothing) equal its two reporter rewards (0.3 + 0.3).
+30 GEN in total, the fund received 2.7 GEN from each of the two breaches, and the reporter lost four 0.2 GEN stakes on
+rulings that paid nothing and earned two 0.3 GEN reporter rewards (net -0.2 GEN).
 
 \`\`\`
 ${balances.join("\n")}

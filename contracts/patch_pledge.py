@@ -22,7 +22,8 @@ _REPORTER_PERCENT = 10  # the reporter of a confirmed breach receives 10% of the
 _CLAIM_WINDOW_SECONDS = 600
 _MAX_SLA_DAYS = 365
 _MAX_LIST = 200
-_MAX_FIXES_CHECKED = 6
+_MAX_FALLBACK_LOOKUPS = 25  # per-version deps.dev lookups if the package listing cannot be read
+_MAX_FIXES_SHOWN = 12  # fixed versions kept in the facts for display; every one is checked
 _HISTORY_LIMIT = 16
 _DAY = 86400
 _HEADERS = {"accept": "application/json", "user-agent": "PatchPledge/1.0 (GenLayer)"}
@@ -94,16 +95,42 @@ def _fetch_text(url: str) -> str:
     return re.sub(r"\s+", " ", text).strip()[:3000]
 
 
+def _release_time(published) -> int:
+    if isinstance(published, str) and re.match(r"^\d{4}-\d{2}-\d{2}T", published):
+        return _seconds(published)
+    return -1
+
+
 def _fix_dates(system: str, package: str, versions: list) -> tuple:
-    """Release time (seconds) of each fixed version according to deps.dev, and how many lookups failed."""
+    """Release time (seconds) of every fixed version according to deps.dev, and how many could not be read.
+
+    One request reads the package's whole version list with publish dates, so every fixed version
+    the advisory reports is checked, however many branches it has. If that listing cannot be read,
+    each version is looked up on its own (up to _MAX_FALLBACK_LOOKUPS); beyond that the dates count
+    as unreadable, which makes the ruling UNCLEAR rather than a guess."""
     found, failed = {}, 0
+    status, data = _fetch_json(f"https://api.deps.dev/v3/systems/{system}/packages/{_path_part(package)}")
+    if status == 200 and isinstance(data, dict) and isinstance(data.get("versions"), list):
+        listed = {}
+        for entry in data["versions"]:
+            key = entry.get("versionKey") if isinstance(entry, dict) else None
+            if isinstance(key, dict) and isinstance(key.get("version"), str):
+                listed[key["version"]] = _release_time(entry.get("publishedAt"))
+        for version in versions:
+            if listed.get(version, -1) >= 0:
+                found[version] = listed[version]
+            else:
+                failed += 1
+        return found, failed
+    if len(versions) > _MAX_FALLBACK_LOOKUPS:
+        return found, len(versions)
     for version in versions:
         status, data = _fetch_json(
             f"https://api.deps.dev/v3/systems/{system}/packages/{_path_part(package)}/versions/{_path_part(version)}"
         )
-        published = data.get("publishedAt") if status == 200 and isinstance(data, dict) else None
-        if isinstance(published, str) and re.match(r"^\d{4}-\d{2}-\d{2}T", published):
-            found[version] = _seconds(published)
+        published = _release_time(data.get("publishedAt")) if status == 200 and isinstance(data, dict) else -1
+        if published >= 0:
+            found[version] = published
         else:
             failed += 1
     return found, failed
@@ -277,7 +304,7 @@ class PatchPledge(gl.Contract):
         def assess() -> str:
             facts = {
                 "advisory": advisory, "package": f"{ecosystem}:{package}", "min_severity": min_severity,
-                "sla_days": sla_days, "severity": "", "published": "", "deadline": "", "fixed_versions": [],
+                "sla_days": sla_days, "severity": "", "published": "", "deadline": "", "fixed_versions": [], "fixed_count": 0,
                 "first_fix": "", "first_fix_at": "", "days_late": None, "timing": "", "scope_answer": "",
                 "scope_given": bool(scope), "statement_given": bool(statement_url),
             }
@@ -319,8 +346,9 @@ class PatchPledge(gl.Contract):
                 return done("NOT_COVERED", "date")
             deadline = _seconds(published) + sla_days * _DAY
             facts["deadline"] = _iso(deadline)
-            versions = sorted(fixed)[:_MAX_FIXES_CHECKED]
-            facts["fixed_versions"] = versions
+            versions = sorted(fixed)
+            facts["fixed_versions"] = versions[:_MAX_FIXES_SHOWN]
+            facts["fixed_count"] = len(versions)
 
             dates, failed = _fix_dates(system, package, versions)
             if dates:

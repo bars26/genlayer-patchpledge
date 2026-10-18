@@ -65,17 +65,34 @@ export async function GET(req: Request) {
   if (day < start || day > end) return out("NOT_COVERED", "date");
   const deadline = published + sla * DAY;
   facts.deadline = iso(deadline);
-  const versions = [...fixed].sort().slice(0, 6);
-  facts.fixed_versions = versions;
+  // Every reported fix counts: one deps.dev request lists all versions of the package with dates.
+  const versions = [...fixed].sort();
+  facts.fixed_versions = versions.slice(0, 12);
+  facts.fixed_count = versions.length;
 
   const system = eco === "PyPI" ? "pypi" : "npm";
   const dates: Record<string, number> = {};
   let failed = 0;
-  for (const v of versions) {
-    const r = await getJson(`https://api.deps.dev/v3/systems/${system}/packages/${enc(pkg)}/versions/${enc(v)}`);
-    const at = r.status === 200 ? Date.parse(String(r.data?.publishedAt || "").slice(0, 19) + "Z") : NaN;
-    if (Number.isNaN(at)) failed++;
-    else dates[v] = at;
+  const listing = await getJson(`https://api.deps.dev/v3/systems/${system}/packages/${enc(pkg)}`);
+  if (listing.status === 200 && Array.isArray(listing.data?.versions)) {
+    const listed: Record<string, number> = {};
+    for (const v of listing.data.versions) {
+      const at = Date.parse(String(v?.publishedAt || "").slice(0, 19) + "Z");
+      if (typeof v?.versionKey?.version === "string" && !Number.isNaN(at)) listed[v.versionKey.version] = at;
+    }
+    for (const v of versions) {
+      if (v in listed) dates[v] = listed[v];
+      else failed++;
+    }
+  } else if (versions.length > 25) {
+    failed = versions.length;
+  } else {
+    for (const v of versions) {
+      const r = await getJson(`https://api.deps.dev/v3/systems/${system}/packages/${enc(pkg)}/versions/${enc(v)}`);
+      const at = r.status === 200 ? Date.parse(String(r.data?.publishedAt || "").slice(0, 19) + "Z") : NaN;
+      if (Number.isNaN(at)) failed++;
+      else dates[v] = at;
+    }
   }
   const first = Object.keys(dates).sort((a, b) => dates[a] - dates[b] || a.localeCompare(b))[0];
   if (first) {

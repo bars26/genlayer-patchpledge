@@ -60,6 +60,7 @@ export interface ClaimFacts {
   published?: string;
   deadline?: string;
   fixed_versions?: string[];
+  fixed_count?: number;
   first_fix?: string;
   first_fix_at?: string;
   days_late?: number | null;

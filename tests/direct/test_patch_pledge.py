@@ -45,16 +45,25 @@ def _mock_json(direct_vm, pattern, body, status=200):
     )
 
 
-def _setup(direct_vm, osv=None, osv_status=200, fixes=None, deps_status=200, answer="IN_SCOPE", statement=None):
-    """Mock OSV, deps.dev (version -> publishedAt) and the model."""
+LISTING_RE = r"^https://api\.deps\.dev/v3/systems/npm/packages/left-pad$"
+
+
+def _listing(fixes):
+    return {"versions": [{"versionKey": {"system": "NPM", "name": "left-pad", "version": v}, "publishedAt": t} for v, t in fixes.items()]}
+
+
+def _setup(direct_vm, osv=None, osv_status=200, fixes=None, deps_status=200, per_version=None, answer="IN_SCOPE", statement=None):
+    """Mock OSV, the deps.dev package listing (version -> publishedAt), optional per-version
+    fallback lookups, and the model."""
     direct_vm.clear_mocks()
     _mock_json(direct_vm, OSV_RE, _osv() if osv is None else osv, osv_status)
-    for version, when in (fixes or {}).items():
+    _mock_json(direct_vm, LISTING_RE, _listing(fixes or {}), deps_status)
+    for version, when in (per_version or {}).items():
         _mock_json(
             direct_vm,
             rf"^https://api\.deps\.dev/v3/systems/npm/packages/left-pad/versions/{version.replace('.', r'\.')}$",
-            {"publishedAt": when},
-            deps_status,
+            {"publishedAt": when} if when else None,
+            200 if when else 404,
         )
     if statement is not None:
         direct_vm.mock_web(
@@ -213,7 +222,7 @@ def test_claim_before_the_deadline_is_refunded(direct_vm, direct_deploy, direct_
         (dict(osv=_osv(severity="MODERATE")), "NOT_COVERED", "severity"),
         (dict(osv=_osv(severity="")), "UNCLEAR", "no_severity"),
         (dict(osv=_osv(published="2025-12-31T23:00:00Z")), "NOT_COVERED", "date"),
-        (dict(fixes={"1.3.1": "2026-03-20T00:00:00Z"}, deps_status=503), "UNCLEAR", "registry_unreachable"),
+        (dict(fixes={"1.3.1": "2026-03-20T00:00:00Z"}, deps_status=503, per_version={"1.3.1": None}), "UNCLEAR", "registry_unreachable"),
     ],
 )
 def test_coverage_is_decided_in_code(direct_vm, direct_deploy, direct_alice, direct_bob, direct_charlie, setup, verdict, code):
@@ -451,3 +460,60 @@ def test_registry_reads_in_one_call(direct_vm, direct_deploy, direct_alice, dire
     assert contract.response_window_seconds() == 600
     with direct_vm.expect_revert("No claim with id claim_9"):
         contract.get_claim("claim_9")
+
+
+# --- every reported fix is considered (steward review, 2026-10-18) ------------
+
+EIGHT = tuple(f"{major}.0.1" for major in range(1, 9))  # sorted as text, 7.0.1 and 8.0.1 come last
+
+
+def test_earliest_fix_outside_the_first_six_counts(direct_vm, direct_deploy, direct_alice, direct_bob, direct_charlie):
+    # Regression: v1 sorted the fixed versions as text and only checked the first six, so an
+    # on-time fix on the 8.x branch was ignored and the claim ruled BREACHED.
+    contract, pledge_id = _pledge(direct_vm, direct_deploy, direct_alice, direct_bob)
+    late = {v: "2026-05-01T00:00:00Z" for v in EIGHT}
+    late["8.0.1"] = "2026-03-03T00:00:00Z"  # the true earliest fix, within the 14-day deadline
+    claim_id = _file(direct_vm, contract, pledge_id, direct_charlie, osv=_osv(fixed=EIGHT), fixes=late)
+    claim = contract.get_claim(claim_id)
+    facts = json.loads(claim.facts_json)
+    assert (claim.verdict, claim.code) == ("KEPT", "fixed_in_time")
+    assert facts["first_fix"] == "8.0.1" and facts["fixed_count"] == 8
+    assert "Fixed version 8.0.1 was released on 2026-03-03" in claim.why
+
+
+def test_late_ruling_uses_the_true_earliest_fix(direct_vm, direct_deploy, direct_alice, direct_bob, direct_charlie):
+    contract, pledge_id = _pledge(direct_vm, direct_deploy, direct_alice, direct_bob)
+    fixes = {v: "2026-06-01T00:00:00Z" for v in EIGHT}
+    fixes["7.0.1"] = "2026-03-25T00:00:00Z"  # earliest, but after the 2026-03-15 deadline
+    claim_id = _file(direct_vm, contract, pledge_id, direct_charlie, osv=_osv(fixed=EIGHT), fixes=fixes)
+    claim = contract.get_claim(claim_id)
+    facts = json.loads(claim.facts_json)
+    assert (claim.verdict, claim.code) == ("BREACHED", "late_fix")
+    assert facts["first_fix"] == "7.0.1" and facts["days_late"] == 10
+
+
+def test_many_fixes_are_all_checked(direct_vm, direct_deploy, direct_alice, direct_bob, direct_charlie):
+    many = tuple(f"{major}.{minor}.0" for major in range(1, 6) for minor in range(8))  # 40 branches
+    fixes = {v: "2026-06-01T00:00:00Z" for v in many}
+    fixes["5.7.0"] = "2026-03-02T00:00:00Z"
+    contract, pledge_id = _pledge(direct_vm, direct_deploy, direct_alice, direct_bob)
+    claim_id = _file(direct_vm, contract, pledge_id, direct_charlie, osv=_osv(fixed=many), fixes=fixes)
+    facts = json.loads(contract.get_claim(claim_id).facts_json)
+    assert contract.get_claim(claim_id).verdict == "KEPT" and facts["first_fix"] == "5.7.0"
+    assert facts["fixed_count"] == 40 and len(facts["fixed_versions"]) == 12
+
+
+def test_per_version_fallback_when_the_listing_is_down(direct_vm, direct_deploy, direct_alice, direct_bob, direct_charlie):
+    contract, pledge_id = _pledge(direct_vm, direct_deploy, direct_alice, direct_bob)
+    per_version = {v: "2026-05-01T00:00:00Z" for v in EIGHT}
+    per_version["8.0.1"] = "2026-03-03T00:00:00Z"
+    claim_id = _file(direct_vm, contract, pledge_id, direct_charlie, osv=_osv(fixed=EIGHT), deps_status=503, per_version=per_version)
+    claim = contract.get_claim(claim_id)
+    assert claim.verdict == "KEPT" and json.loads(claim.facts_json)["first_fix"] == "8.0.1"
+
+
+def test_too_many_fixes_without_the_listing_is_unclear(direct_vm, direct_deploy, direct_alice, direct_bob, direct_charlie):
+    many = tuple(f"{major}.{minor}.0" for major in range(1, 4) for minor in range(9))  # 27 > 25 lookups
+    contract, pledge_id = _pledge(direct_vm, direct_deploy, direct_alice, direct_bob)
+    claim_id = _file(direct_vm, contract, pledge_id, direct_charlie, osv=_osv(fixed=many), deps_status=503)
+    assert contract.get_claim(claim_id).code == "registry_unreachable"

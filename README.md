@@ -29,7 +29,7 @@ Every ruling stores a plain-English **reason** built only from facts all validat
 **Live app:** [patchpledge-bars26.vercel.app](https://patchpledge-bars26.vercel.app). Browsing needs no wallet. Writes need
 MetaMask on GenLayer Studio (chain 61999); the **Test GEN** button funds your wallet from the Studio faucet.
 **Demo video (30 s):** [youtu.be/rspweMSn_mA](https://youtu.be/rspweMSn_mA).
-**Contract:** [`0x3d85a84149c05EBc16fD11A358f26473901afbB8`](https://explorer-studio.genlayer.com/address/0x3d85a84149c05EBc16fD11A358f26473901afbB8) on GenLayer Studio.
+**Contract:** [`0x07c759cf79Fbb1d931E7F70379e80ba55D527598`](https://explorer-studio.genlayer.com/address/0x07c759cf79Fbb1d931E7F70379e80ba55D527598) on GenLayer Studio.
 
 ## Verified live, on real advisories
 
@@ -54,13 +54,18 @@ coverage plus one deadline had passed.
 | Ruling | When |
 |---|---|
 | `NOT_COVERED` | advisory not in OSV, withdrawn, does not list this package, below the severity floor, or published outside the coverage dates |
-| `KEPT` | the first fixed version (OSV) was released (deps.dev) on or before publication + deadline; a fix shipped before disclosure counts |
+| `KEPT` | the earliest-released of **all** fixed versions OSV reports was released (deps.dev) on or before publication + deadline; a fix shipped before disclosure counts |
 | not due | no fix and the deadline has not passed: the claim is refunded, not opened |
 | `BREACHED` | first fix after the deadline, or deadline passed with no fix, and (if there is a scope or statement) validators answered `IN_SCOPE` |
 | `EXCUSED` | deadline missed, but validators answered `OUT_OF_SCOPE`: the advisory is outside the written scope, or the pledger's statement shows specifically why the package is not affected |
 | `UNCLEAR` | OSV or a release date could not be read, the advisory has no severity, or the scope answer was `UNCLEAR` |
 
-A fixed version whose release date cannot be read makes the ruling `UNCLEAR`, never `BREACHED`: that version might have
+Every fixed version the advisory reports is checked, on every branch: one deps.dev request returns the package's whole
+version list with publish dates, and the ruling uses the earliest-released fix. (The first deployment sorted fixed
+versions as text and only looked at six; a steward caught it. `test_earliest_fix_outside_the_first_six_counts` and
+`test_per_version_fallback_when_the_listing_is_down` reproduce that case: on the old code the claim was ruled
+`BREACHED`, now it is `KEPT`.) If the listing cannot be read, each fixed version is looked up on its own, up to 25; a
+fixed version whose release date cannot be read makes the ruling `UNCLEAR`, never `BREACHED`: that version might have
 been on time. The model's answer must be exactly `IN_SCOPE`, `OUT_OF_SCOPE` or `UNCLEAR`, and validators must agree
 exactly (`strict_eq` on the whole result, facts included).
 
@@ -96,7 +101,7 @@ contract message.
 ```bash
 pip install -r requirements.txt
 genvm-lint check contracts/patch_pledge.py
-pytest tests/direct/ -v                     # 50 tests, OSV / deps.dev / LLM mocked
+pytest tests/direct/ -v                     # 55 tests, OSV / deps.dev / LLM mocked
 
 npm install
 node scripts/deploy.mjs                     # deploy to GenLayer Studio
@@ -121,7 +126,7 @@ cd frontend && cp .env.example .env.local && npm run dev
 
 ```
 contracts/patch_pledge.py     the Intelligent Contract
-tests/direct/                 50 direct-mode tests (rules, money, who-can-act, refusals)
+tests/direct/                 55 direct-mode tests (rules, money, who-can-act, refusals)
 scripts/                      deploy, verify-code, live demo, reproduction log
 frontend/                     Next.js app (light "paper and ink" theme)
 docs/REPRODUCTION.md          the live run with every transaction hash

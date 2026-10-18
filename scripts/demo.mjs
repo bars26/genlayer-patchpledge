@@ -210,6 +210,14 @@ await write(P, "pledger", "create_pledge", ["npm", "@budibase/server", "HIGH", 9
 const s4 = BigInt(await read(P, "stake_for", [pid(4)]));
 await write(R, "reporter", "file_breach", [pid(4), "GHSA-6x9p-4r67-5gjx"], s4); // not due: refunded with the deadline
 
+// P5: Next.js, CRITICAL within 14 days, for 2025. GHSA-9qr9-h5gf-34mp lists seven fixed versions; the earliest
+// released one (16.0.7) sorts after the first six as text, so every reported fix must be checked to find it.
+console.log("");
+await write(P, "pledger", "create_pledge", ["npm", "next", "CRITICAL", 14, "", 2n * GEN, acct.fund.address, "2025-01-01", "2026-12-31"], 4n * GEN);
+const s5 = BigInt(await read(P, "stake_for", [pid(5)]));
+const c5 = await file("reporter", R, pid(5), "GHSA-9qr9-h5gf-34mp", "P5 next, seven fixed branches", s5);
+await write(R, "reporter", "settle", [c5]);
+
 // After the response window, anyone settles the open claims.
 console.log(`\nwaiting ${WINDOW_MS / 60000} minutes for the response window...`);
 await write(B, "bystander", "settle", [c3], 0n, { expectError: true });
@@ -220,14 +228,14 @@ await write(B, "bystander", "settle", [c4]);
 await sleep(8000);
 const end = Object.fromEntries(await Promise.all(Object.entries(acct).map(async ([k, a]) => [k, await balance(a.address)])));
 console.log("\nfinal pledges:");
-for (let n = 0; n < 5; n++) {
+for (let n = 0; n < 6; n++) {
   const p = await read(P, "get_pledge", [pid(n)]);
   console.log(`  ${pid(n)} ${field(p, "ecosystem")}:${field(p, "package").padEnd(18)} bond=${fmt(field(p, "bond")).padStart(6)} paid=${fmt(field(p, "total_paid"))} kept=${field(p, "n_kept")} breached=${field(p, "n_breached")} other=${field(p, "n_other")} pending=${field(p, "pending")}`);
 }
-for (const id of [c0, c1, c2, c3, c4]) console.log(`  explain_claim(${id}) = ${await read(P, "explain_claim", [id])}`);
+for (const id of [c0, c1, c2, c3, c4, c5]) console.log(`  explain_claim(${id}) = ${await read(P, "explain_claim", [id])}`);
 console.log(`  covered_by(npm, next) = ${JSON.stringify(await read(P, "covered_by", ["npm", "next"]))}`);
 console.log(`\nbalances: ${Object.keys(acct).map((k) => `${k} ${fmt(start[k])} -> ${fmt(end[k])}`).join(", ")} GEN`);
 console.log("(transfers are emitted on finalization, so balances catch up once the appeal window closes)");
-const out = { contract: CONTRACT, accounts: Object.fromEntries(Object.entries(acct).map(([k, a]) => [k, a.address])), pledges: [0, 1, 2, 3, 4].map(pid), claims: [c0, c1, c2, c3, c4], log };
+const out = { contract: CONTRACT, accounts: Object.fromEntries(Object.entries(acct).map(([k, a]) => [k, a.address])), pledges: [0, 1, 2, 3, 4, 5].map(pid), claims: [c0, c1, c2, c3, c4, c5], log };
 writeFileSync(new URL("../docs/demo-run.json", import.meta.url), JSON.stringify(out, null, 2));
 console.log("\nwrote docs/demo-run.json");
