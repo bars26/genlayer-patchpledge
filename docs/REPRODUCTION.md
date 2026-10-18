@@ -47,15 +47,15 @@ bystander  1.00 GEN
 
 ## Wallet test from the live app
 
-MetaMask test from the production frontend on the previous deployment (0x3d85a84149c05EBc16fD11A358f26473901afbB8, before the all-fixes change), following the README steps: one wallet as pledger, beneficiary and reporter. Wallet `0x4f80b5c475fced34fc9a07ffccf39e1adc1406bf`. All three transactions are FINALIZED with execution result SUCCESS. (Transaction links point at that deployment.)
+MetaMask test from the production frontend (patchpledge-bars26.vercel.app) on this deployment, following the README steps: one wallet as pledger, beneficiary and reporter. Wallet `0x4f80b5c475fced34fc9a07ffccf39e1adc1406bf`. All three transactions are FINALIZED with execution result SUCCESS.
 
 | Step | GEN sent | Result | Tx |
 |---|---|---|---|
-| Make a pledge: npm bigint-buffer, HIGH, 30 days, payout 1, bond 2, from 2025-01-01 | 2 GEN | pledge_5 | [`0xc411f37e…`](https://explorer-studio.genlayer.com/tx/0xc411f37ea0dff03fe947634d6f7a6f503990f483a35a16073cf8a4437a18b83e) |
-| Report a missed deadline: GHSA-3gc7-fjrx-p6mg | 0.1 GEN | claim_5: BREACHED (no_fix) | [`0x4251da5c…`](https://explorer-studio.genlayer.com/tx/0x4251da5c54755b617055de86806d74f104e934cab199e0816c0a6a8b3e434dca) |
-| Concede and pay now (as the pledger) |  | paid: 0.9 GEN to the beneficiary, 0.1 GEN + stake to the reporter | [`0x3840f53f…`](https://explorer-studio.genlayer.com/tx/0x3840f53fe18f58a16fed78f53247a02e7a1cd5619ea309a14523b985d6b11ecd) |
+| Make a pledge: npm bigint-buffer, HIGH, 30 days, payout 1, bond 2, from 2025-01-01 | 2 GEN | pledge_6 | [`0xb7f89934…`](https://explorer-studio.genlayer.com/tx/0xb7f899341e2d7fe51efba2a511ba3bd91505d5b04b07cd7aefe0ad0216d0ca2e) |
+| Report a missed deadline: GHSA-3gc7-fjrx-p6mg | 0.1 GEN | claim_6: BREACHED (no_fix) | [`0xa47c4f06…`](https://explorer-studio.genlayer.com/tx/0xa47c4f068636c4a229b7d3c69367636ca9175425a3014bcac3fe5b5c12e2f84e) |
+| Concede and pay now (as the pledger) |  | paid: 0.9 GEN to the beneficiary, 0.1 GEN + stake to the reporter | [`0xd1093f2e…`](https://explorer-studio.genlayer.com/tx/0xd1093f2e3a5ec95463d578b339cda918dd4e8312a39fb9ac333f21a3472dcad3) |
 
-On-chain reason for claim_5: GHSA-3gc7-fjrx-p6mg was published on 2025-04-04. The 30-day deadline (2025-05-04) has passed and no fixed version of npm:bigint-buffer is listed.
+On-chain reason for claim_6: GHSA-3gc7-fjrx-p6mg was published on 2025-04-04. The 30-day deadline (2025-05-04) has passed and no fixed version of npm:bigint-buffer is listed.
 
 ## Every transaction
 

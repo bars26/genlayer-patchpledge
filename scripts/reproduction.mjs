@@ -47,13 +47,13 @@ try {
   const ui = JSON.parse(readFileSync(new URL("../docs/ui-test.json", import.meta.url), "utf8"));
   uiTest = `## Wallet test from the live app
 
-${ui.note} Wallet \`${ui.wallet}\`. All three transactions are FINALIZED with execution result SUCCESS.${ui.contract ? "" : " (Transaction links point at that deployment.)"}
+${ui.note} Wallet \`${ui.wallet}\`. All three transactions are FINALIZED with execution result SUCCESS.
 
 | Step | GEN sent | Result | Tx |
 |---|---|---|---|
 ${ui.steps.map(([step, value, result, hash]) => `| ${esc(step)} | ${value} | ${esc(result)} | ${tx(hash)} |`).join("\n")}
 
-On-chain reason for claim_5: ${ui.why}
+On-chain reason for claim_6: ${ui.why}
 `;
 } catch {
   // no UI test recorded
