@@ -1,5 +1,6 @@
 """Direct-mode tests for the PatchPledge contract."""
 
+import hashlib
 import json
 from datetime import datetime, timedelta, timezone
 
@@ -52,12 +53,41 @@ def _listing(fixes):
     return {"versions": [{"versionKey": {"system": "NPM", "name": "left-pad", "version": v}, "publishedAt": t} for v, t in fixes.items()]}
 
 
-def _setup(direct_vm, osv=None, osv_status=200, fixes=None, deps_status=200, per_version=None, answer="IN_SCOPE", statement=None):
-    """Mock OSV, the deps.dev package listing (version -> publishedAt), optional per-version
-    fallback lookups, and the model."""
+GH_RE = rf"^https://api\.github\.com/advisories/{ADV}$"
+SECOND_RE = r"^https://packages\.ecosyste\.ms/api/v1/registries/npmjs\.org/packages/left-pad/versions/{v}$"
+
+
+def _gh(osv, first_patched=None, severity=None, published=None, withdrawn=None):
+    """The GitHub Advisory Database's view of the same advisory (by default it agrees with OSV, without a patched version)."""
+    pkg = (osv.get("affected") or [{}])[0].get("package") or {}
+    return {
+        "ghsa_id": osv["id"], "severity": (severity or osv["database_specific"]["severity"]).lower(),
+        "published_at": published or osv["published"], "withdrawn_at": withdrawn,
+        "vulnerabilities": [{"package": {"ecosystem": {"PyPI": "pip"}.get(pkg.get("ecosystem"), pkg.get("ecosystem")), "name": pkg.get("name")},
+                             "first_patched_version": first_patched}],
+    }
+
+
+def _sha(text):
+    return hashlib.sha256(text.encode()).hexdigest()
+
+
+def _setup(direct_vm, osv=None, osv_status=200, fixes=None, deps_status=200, per_version=None, answer="IN_SCOPE", statement=None,
+           gh=None, gh_status=200, second=None, second_status=200):
+    """Mock OSV and GitHub's advisory, the deps.dev package listing (version -> publishedAt), optional
+    per-version fallback lookups, the second release-date source (same dates unless `second` says
+    otherwise) and the model."""
     direct_vm.clear_mocks()
-    _mock_json(direct_vm, OSV_RE, _osv() if osv is None else osv, osv_status)
+    record = _osv() if osv is None else osv
+    _mock_json(direct_vm, OSV_RE.replace(ADV, record.get("id", ADV)), record, osv_status)
+    _mock_json(direct_vm, GH_RE.replace(ADV, record.get("id", ADV)), _gh(record) if gh is None else gh, gh_status)
     _mock_json(direct_vm, LISTING_RE, _listing(fixes or {}), deps_status)
+    dated = dict(fixes or {})
+    dated.update({v: t for v, t in (per_version or {}).items() if t})
+    dated.update(second or {})
+    for version, when in dated.items():
+        _mock_json(direct_vm, SECOND_RE.format(v=version.replace(".", r"\.")), {"number": version, "published_at": when} if when else None,
+                   second_status if when else 404)
     for version, when in (per_version or {}).items():
         _mock_json(
             direct_vm,
@@ -78,7 +108,7 @@ def _pledge(direct_vm, direct_deploy, pledger, payee, bond=10 * GEN, **terms):
     contract = direct_deploy(CONTRACT_PATH)
     args = dict(
         ecosystem="npm", package="left-pad", min_severity="HIGH", sla_days=14, scope="",
-        payout=4 * GEN, beneficiary=to_hex(payee), coverage_start="2026-01-01", coverage_end="2027-12-31",
+        payout=4 * GEN, max_payouts=2, beneficiary=to_hex(payee), coverage_start="2026-01-01", coverage_end="2027-12-31",
     )
     args.update(terms)
     direct_vm.value = bond
@@ -131,7 +161,9 @@ def test_create_pledge_records_terms(direct_vm, direct_deploy, direct_alice, dir
         (dict(coverage_start="2026-1-1"), "coverage dates must be YYYY-MM-DD"),
         (dict(coverage_start="2027-01-01", coverage_end="2026-12-31"), "coverage_start must not be after coverage_end"),
         (dict(coverage_start="2020-01-01", coverage_end="2020-12-31"), "coverage_end is already in the past"),
-        (dict(payout=11 * GEN), "the bond must cover at least one payout"),
+        (dict(payout=6 * GEN), "the bond must cover every payout: at least 2 x payout"),
+        (dict(max_payouts=0), "max_payouts must be a whole number from 1 to 10"),
+        (dict(max_payouts=11), "max_payouts must be a whole number from 1 to 10"),
     ],
 )
 def test_invalid_pledges_are_refunded(direct_vm, direct_deploy, direct_alice, direct_bob, terms, reason):
@@ -146,13 +178,17 @@ def test_pypi_names_are_normalised(direct_vm, direct_deploy, direct_alice, direc
     assert contract.covered_by("PyPI", "django-rest-framework") == [pledge_id]
 
 
-def test_only_the_pledger_adds_bond(direct_vm, direct_deploy, direct_alice, direct_bob):
+def test_anyone_can_back_a_pledge(direct_vm, direct_deploy, direct_alice, direct_bob, direct_charlie):
     contract, pledge_id = _pledge(direct_vm, direct_deploy, direct_alice, direct_bob)
-    direct_vm.sender, direct_vm.value = direct_bob, GEN
-    assert contract.add_bond(pledge_id).startswith("REFUNDED: Only the pledger")
-    direct_vm.sender = direct_alice
-    assert contract.add_bond(pledge_id) == "added"
-    assert int(contract.get_pledge(pledge_id).bond) == 11 * GEN
+    direct_vm.sender, direct_vm.value = direct_charlie, 3 * GEN
+    assert contract.back_pledge(pledge_id) == "backed"
+    direct_vm.sender, direct_vm.value = direct_alice, GEN
+    assert contract.back_pledge(pledge_id) == "backed"
+    direct_vm.value = 0
+    p = contract.get_pledge(pledge_id)
+    assert int(p.bond) == 14 * GEN and json.loads(p.backers_json) == {to_hex(direct_alice): str(11 * GEN), to_hex(direct_charlie): str(3 * GEN)}
+    direct_vm.value = 0
+    assert contract.back_pledge(pledge_id).startswith("REFUNDED: Send some GEN")
 
 
 # --- rulings -----------------------------------------------------------------
@@ -200,7 +236,7 @@ def test_no_fix_after_the_deadline_is_a_breach(direct_vm, direct_deploy, direct_
     claim_id = _file(direct_vm, contract, pledge_id, direct_charlie, **_no_fix())
     claim = contract.get_claim(claim_id)
     assert (claim.verdict, claim.code) == ("BREACHED", "no_fix")
-    assert "no fixed version of npm:left-pad is listed" in claim.why
+    assert "neither OSV nor GitHub lists a fixed version of npm:left-pad" in claim.why
 
 
 def test_claim_before_the_deadline_is_refunded(direct_vm, direct_deploy, direct_alice, direct_bob, direct_charlie):
@@ -214,7 +250,7 @@ def test_claim_before_the_deadline_is_refunded(direct_vm, direct_deploy, direct_
 @pytest.mark.parametrize(
     "setup,verdict,code",
     [
-        (dict(osv_status=404), "NOT_COVERED", "not_found"),
+        (dict(osv_status=404, gh_status=404), "NOT_COVERED", "not_found"),
         (dict(osv_status=500), "UNCLEAR", "osv_unreachable"),
         (dict(osv=_osv(withdrawn="2026-03-02T00:00:00Z")), "NOT_COVERED", "withdrawn"),
         (dict(osv=_osv(name="right-pad")), "NOT_COVERED", "package"),
@@ -318,22 +354,28 @@ def test_unclear_claim_returns_the_stake(direct_vm, direct_deploy, direct_alice,
     assert int(contract.get_pledge(pledge_id).bond) == 10 * GEN
 
 
-def test_payout_is_capped_by_the_bond(direct_vm, direct_deploy, direct_alice, direct_bob, direct_charlie):
-    contract, pledge_id = _pledge(direct_vm, direct_deploy, direct_alice, direct_bob, bond=5 * GEN)
-    first = _file(direct_vm, contract, pledge_id, direct_charlie, **_no_fix())
-    _expire(contract, first)
-    contract.settle(first)
-    other = "GHSA-3g8h-86w9-wvmq"
-    direct_vm.clear_mocks()
-    _mock_json(direct_vm, rf"^https://api\.osv\.dev/v1/vulns/{other}$", _osv(fixed=(), adv=other))
-    direct_vm.sender, direct_vm.value = direct_charlie, 4 * GEN // 10
-    second = contract.file_breach(pledge_id, other)
-    direct_vm.value = 0
-    _expire(contract, second)
-    contract.settle(second)
+OTHER, THIRD = "GHSA-3g8h-86w9-wvmq", "GHSA-36qx-fr4f-26g5"
+
+
+@pytest.mark.parametrize("order", [(0, 1), (1, 0)])
+def test_payouts_are_reserved_and_always_paid_in_full(direct_vm, direct_deploy, direct_alice, direct_bob, direct_charlie, order):
+    # The bond is exactly 2 x payout and the pledge pays at most 2 breaches.
+    contract, pledge_id = _pledge(direct_vm, direct_deploy, direct_alice, direct_bob, bond=8 * GEN)
+    claims = [_file(direct_vm, contract, pledge_id, direct_charlie, adv=a, osv=_osv(fixed=(), adv=a)) for a in (ADV, OTHER)]
+    # both remaining payouts are now reserved by open claims
+    assert "Every remaining payout is reserved by open claims" in _file(direct_vm, contract, pledge_id, direct_charlie, adv=THIRD, osv=_osv(fixed=(), adv=THIRD))
+    assert json.loads(contract.totals()) == {"bonds": str(8 * GEN), "pending_stakes": str(8 * GEN // 10), "expected_balance": str(8 * GEN + 8 * GEN // 10)}
+    for i in order:
+        _expire(contract, claims[i])
+        assert contract.settle(claims[i]) == "paid"
+        last = json.loads(contract.get_claim(claims[i]).timeline_json)[-1]
+        assert (last["beneficiary"], last["reporter"]) == (str(36 * GEN // 10), str(4 * GEN // 10))
     p = contract.get_pledge(pledge_id)
-    assert int(p.bond) == 0 and int(p.total_paid) == 5 * GEN
-    assert "no bond left" in _file(direct_vm, contract, pledge_id, direct_charlie, adv="GHSA-36qx-fr4f-26g5", **_no_fix())
+    assert (int(p.bond), int(p.total_paid), int(p.n_breached)) == (0, 8 * GEN, 2)
+    assert "has paid its maximum of 2 breaches" in _file(direct_vm, contract, pledge_id, direct_charlie, adv=THIRD, osv=_osv(fixed=(), adv=THIRD))
+    cov = json.loads(contract.coverage(pledge_id))
+    assert (cov["payouts_left"], cov["liability"], cov["covered"]) == (0, "0", True)
+    assert json.loads(contract.totals())["expected_balance"] == "0"
 
 
 # --- who may act, and when (adversarial) -------------------------------------
@@ -424,20 +466,24 @@ def test_window_closes_for_contests(direct_vm, direct_deploy, direct_alice, dire
 
 def test_bond_is_locked_until_the_last_sla_and_open_claims(direct_vm, direct_deploy, direct_alice, direct_bob, direct_charlie):
     contract, pledge_id = _pledge(direct_vm, direct_deploy, direct_alice, direct_bob)
+    direct_vm.sender, direct_vm.value = direct_charlie, 5 * GEN  # a company that depends on left-pad backs the pledge
+    contract.back_pledge(pledge_id)
+    direct_vm.value = 0
     claim_id = _file(direct_vm, contract, pledge_id, direct_charlie, **_no_fix())
-    direct_vm.sender = direct_bob
-    with direct_vm.expect_revert("Only the pledger can withdraw the bond"):
-        contract.withdraw(pledge_id)
     direct_vm.sender = direct_alice
     with direct_vm.expect_revert("The bond stays until 2028-01-15"):
-        contract.withdraw(pledge_id)
+        contract.close_pledge(pledge_id)
     # coverage ended long ago, but the claim is still open
     contract.pledges[pledge_id].coverage_end = "2026-01-31"
     with direct_vm.expect_revert("Settle the open claims first"):
-        contract.withdraw(pledge_id)
+        contract.close_pledge(pledge_id)
     _expire(contract, claim_id)
     contract.settle(claim_id)
-    assert contract.withdraw(pledge_id) == str(6 * GEN)
+    direct_vm.sender = direct_bob  # anyone can close
+    assert contract.close_pledge(pledge_id) == str(11 * GEN)
+    # 11 GEN left of 15 bonded: alice put in 10, charlie 5
+    shares = json.loads(contract.get_pledge(pledge_id).history_json)[-1]["shares"]
+    assert shares == {to_hex(direct_alice): str(11 * GEN - 11 * GEN * 5 // 15), to_hex(direct_charlie): str(11 * GEN * 5 // 15)}
     p = contract.get_pledge(pledge_id)
     assert p.state == "closed" and int(p.bond) == 0
     assert contract.covered_by("npm", "left-pad") == []
@@ -450,7 +496,7 @@ def test_bond_is_locked_until_the_last_sla_and_open_claims(direct_vm, direct_dep
 def test_registry_reads_in_one_call(direct_vm, direct_deploy, direct_alice, direct_bob, direct_charlie):
     contract, pledge_id = _pledge(direct_vm, direct_deploy, direct_alice, direct_bob)
     direct_vm.sender, direct_vm.value = direct_alice, 3 * GEN
-    contract.create_pledge("PyPI", "requests", "CRITICAL", 30, "", GEN, to_hex(direct_bob), "2026-01-01", "2027-01-01")
+    contract.create_pledge("PyPI", "requests", "CRITICAL", 30, "", GEN, 3, to_hex(direct_bob), "2026-01-01", "2027-01-01")
     direct_vm.value = 0
     claim_id = _file(direct_vm, contract, pledge_id, direct_charlie, **_no_fix())
     assert [p.id for p in contract.get_pledges(0, 200)] == ["pledge_0", "pledge_1"]
@@ -517,3 +563,120 @@ def test_too_many_fixes_without_the_listing_is_unclear(direct_vm, direct_deploy,
     contract, pledge_id = _pledge(direct_vm, direct_deploy, direct_alice, direct_bob)
     claim_id = _file(direct_vm, contract, pledge_id, direct_charlie, osv=_osv(fixed=many), deps_status=503)
     assert contract.get_claim(claim_id).code == "registry_unreachable"
+
+
+# --- v2: two advisory databases -------------------------------------------------
+
+
+@pytest.mark.parametrize("setup, verdict, code", [
+    (dict(osv_status=404, gh=None), "BREACHED", "no_fix"),  # GitHub alone knows it: the ruling uses GitHub
+    (dict(gh_status=404), "BREACHED", "no_fix"),  # OSV alone knows it
+    (dict(osv_status=404, gh_status=500), "UNCLEAR", "osv_unreachable"),  # one says not found, the other is down: proves nothing
+    (dict(gh_status=429), "UNCLEAR", "osv_unreachable"),  # GitHub rate-limited
+    (dict(gh=_gh(_osv(fixed=()), severity="MODERATE")), "UNCLEAR", "severity_disagrees"),
+    (dict(gh=_gh(_osv(fixed=()), withdrawn="2026-03-05T00:00:00Z")), "NOT_COVERED", "withdrawn"),
+])
+def test_two_advisory_databases(direct_vm, direct_deploy, direct_alice, direct_bob, direct_charlie, setup, verdict, code):
+    contract, pledge_id = _pledge(direct_vm, direct_deploy, direct_alice, direct_bob)
+    claim = contract.get_claim(_file(direct_vm, contract, pledge_id, direct_charlie, osv=_osv(fixed=()), **setup))
+    assert (claim.verdict, claim.code) == (verdict, code)
+
+
+def test_a_fix_only_github_lists_still_counts(direct_vm, direct_deploy, direct_alice, direct_bob, direct_charlie):
+    contract, pledge_id = _pledge(direct_vm, direct_deploy, direct_alice, direct_bob)
+    claim = contract.get_claim(_file(direct_vm, contract, pledge_id, direct_charlie, osv=_osv(fixed=()),
+                                     gh=_gh(_osv(fixed=()), first_patched="1.3.1"), fixes={"1.3.1": "2026-03-05T00:00:00Z"}))
+    assert (claim.verdict, claim.code) == ("KEPT", "fixed_in_time")
+    assert json.loads(claim.facts_json)["fixed_versions"] == ["1.3.1"]
+
+
+def test_the_later_publication_date_is_used(direct_vm, direct_deploy, direct_alice, direct_bob, direct_charlie):
+    contract, pledge_id = _pledge(direct_vm, direct_deploy, direct_alice, direct_bob)
+    # OSV says 2026-03-01, GitHub 2026-03-10: the deadline runs from 2026-03-10, the more lenient date
+    claim = contract.get_claim(_file(direct_vm, contract, pledge_id, direct_charlie, fixes={"1.3.1": "2026-03-20T00:00:00Z"},
+                                     gh=_gh(_osv(), published="2026-03-10T00:00:00Z")))
+    assert (claim.verdict, json.loads(claim.facts_json)["deadline"]) == ("KEPT", "2026-03-24T00:00:00Z")
+
+
+# --- v2: the deciding release date is confirmed by a second source --------------------
+
+
+@pytest.mark.parametrize("fix_at, second, verdict, code", [
+    ("2026-03-20T00:00:00Z", {"1.3.1": "2026-03-20T09:00:00Z"}, "BREACHED", "late_fix"),  # same day: confirmed
+    ("2026-03-20T00:00:00Z", {"1.3.1": "2026-03-10T00:00:00Z"}, "UNCLEAR", "dates_disagree"),
+    ("2026-03-10T00:00:00Z", {"1.3.1": "2026-03-25T00:00:00Z"}, "UNCLEAR", "dates_disagree"),  # an on-time ruling needs it too
+    ("2026-03-20T00:00:00Z", {"1.3.1": None}, "UNCLEAR", "second_source_unreachable"),
+])
+def test_second_release_date_source(direct_vm, direct_deploy, direct_alice, direct_bob, direct_charlie, fix_at, second, verdict, code):
+    contract, pledge_id = _pledge(direct_vm, direct_deploy, direct_alice, direct_bob)
+    claim = contract.get_claim(_file(direct_vm, contract, pledge_id, direct_charlie, fixes={"1.3.1": fix_at}, second=second))
+    assert (claim.verdict, claim.code) == (verdict, code)
+
+
+def test_pypi_release_dates_come_from_pypi_itself(direct_vm, direct_deploy, direct_alice, direct_bob, direct_charlie):
+    contract, pledge_id = _pledge(direct_vm, direct_deploy, direct_alice, direct_bob, ecosystem="pypi", package="Left_Pad")
+    osv = _osv(ecosystem="PyPI", name="left-pad")
+    direct_vm.clear_mocks()
+    _mock_json(direct_vm, OSV_RE, osv)
+    _mock_json(direct_vm, GH_RE, _gh(osv))
+    _mock_json(direct_vm, r"^https://api\.deps\.dev/v3/systems/pypi/packages/Left_Pad$",
+               {"versions": [{"versionKey": {"version": "1.3.1"}, "publishedAt": "2026-03-20T00:00:00Z"}]})
+    _mock_json(direct_vm, r"^https://pypi\.org/pypi/Left_Pad/1\.3\.1/json$",
+               {"urls": [{"upload_time_iso_8601": "2026-03-20T08:00:00.000000Z"}, {"upload_time_iso_8601": "2026-03-20T07:00:00.000000Z"}]})
+    direct_vm.sender, direct_vm.value = direct_charlie, int(contract.stake_for(pledge_id))
+    claim = contract.get_claim(contract.file_breach(pledge_id, ADV))
+    direct_vm.value = 0
+    facts = json.loads(claim.facts_json)
+    assert (claim.verdict, facts["second_source"], facts["second_fix_at"]) == ("BREACHED", "PyPI", "2026-03-20T07:00:00Z")
+
+
+# --- v2: verified maintainer ------------------------------------------------------------
+
+NPM_LATEST_RE = r"^https://registry\.npmjs\.org/left-pad/latest$"
+PLEDGE_FILE_RE = r"^https://raw\.githubusercontent\.com/stevemao/left-pad/HEAD/\.patchpledge$"
+
+
+@pytest.mark.parametrize("repository, file_status, file_body, status", [
+    ({"type": "git", "url": "git+https://github.com/stevemao/left-pad.git"}, 200, "maintainer: {wallet}\n", "verified"),
+    ("github:stevemao/left-pad", 200, "maintainer: {wallet}", "no_repo"),  # shorthand without github.com is not trusted
+    ({"url": "https://github.com/stevemao/left-pad"}, 200, "maintainer: 0x0000000000000000000000000000000000000001", "address_missing"),
+    ({"url": "https://github.com/stevemao/left-pad"}, 404, "", "file_missing"),
+    ({"url": "https://gitlab.com/stevemao/left-pad"}, 200, "", "no_repo"),
+    ({"url": "https://github.com/stevemao/left-pad"}, 503, "", "unreachable"),
+])
+def test_verified_maintainer(direct_vm, direct_deploy, direct_alice, direct_bob, repository, file_status, file_body, status):
+    contract, pledge_id = _pledge(direct_vm, direct_deploy, direct_alice, direct_bob)
+    direct_vm.clear_mocks()
+    _mock_json(direct_vm, NPM_LATEST_RE, {"name": "left-pad", "repository": repository})
+    direct_vm.mock_web(PLEDGE_FILE_RE, {"method": "GET", "response": {"status": file_status, "headers": {"Content-Type": b"text/plain"},
+                                                                      "body": file_body.format(wallet=to_hex(direct_alice)).encode()}})
+    direct_vm.sender = direct_bob  # anyone can run the check
+    assert contract.verify_maintainer(pledge_id) == status
+    m = json.loads(contract.get_pledge(pledge_id).maintainer_json)
+    assert m["status"] == status and json.loads(contract.coverage(pledge_id))["maintainer"] == status
+    if status == "verified":
+        assert m["repo"] == "stevemao/left-pad" and m["file_sha256"] == _sha(file_body.format(wallet=to_hex(direct_alice)).lower())
+
+
+# --- v2: evidence --------------------------------------------------------------------------
+
+
+def test_every_assessment_keeps_an_evidence_packet(direct_vm, direct_deploy, direct_alice, direct_bob, direct_charlie):
+    contract, pledge_id = _pledge(direct_vm, direct_deploy, direct_alice, direct_bob, scope="Prototype pollution only")
+    claim_id = _file(direct_vm, contract, pledge_id, direct_charlie, fixes={"1.3.1": "2026-03-20T00:00:00Z"})
+    packet = json.loads(contract.get_claim(claim_id).evidence_json)[0]
+    osv_fields = {"published": "2026-03-01T10:00:00Z", "severity": "CRITICAL", "fixed": ["1.3.1"], "summary": "Prototype pollution in left-pad"}
+    assert {k: packet["osv"][k] for k in osv_fields} == osv_fields and packet["osv"]["fields_sha256"] == _sha(json.dumps(osv_fields, sort_keys=True))
+    assert packet["github"]["severity"] == "CRITICAL" and packet["github"]["status"] == 200
+    assert packet["deps_dev"]["dates"] == {"1.3.1": "2026-03-20T00:00:00Z"}
+    assert packet["second_source"]["published"] == "2026-03-20T00:00:00Z"
+    _setup(direct_vm, fixes={"1.3.1": "2026-03-20T00:00:00Z"}, answer="OUT_OF_SCOPE", statement="<p>left-pad never ships the merge helper.</p>")
+    direct_vm.sender = direct_alice
+    assert contract.contest(claim_id, STATEMENT_URL) == "EXCUSED"
+    claim = contract.get_claim(claim_id)
+    packets = json.loads(claim.evidence_json)
+    text = "left-pad never ships the merge helper."
+    assert packets[1]["statement"] == {"url": STATEMENT_URL, "sha256": _sha(text), "chars": len(text), "excerpt": text}
+    assert [s["evidence"] for s in json.loads(claim.timeline_json)] == [p["packet_sha256"] for p in packets]
+    for p in packets:
+        assert p["packet_sha256"] == _sha(json.dumps({k: v for k, v in p.items() if k != "packet_sha256"}, sort_keys=True))

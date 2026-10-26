@@ -3,7 +3,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
 import PatchPledge, { type CreatePledgeInput, type TxProgress, type TxResult } from "../contracts/PatchPledge";
-import { sameAddress, stakeFor, todayUtc, windowLeftSeconds, withdrawAfter, wei, VERDICT_STYLE, type Claim, type Pledge, type Verdict } from "../contracts/types";
+import { coverageOf, sameAddress, stakeFor, todayUtc, windowLeftSeconds, withdrawAfter, wei, MAINTAINER_TEXT, VERDICT_STYLE, type Claim, type Pledge, type Verdict } from "../contracts/types";
 import { getContractAddress, getStudioUrl } from "../genlayer/client";
 import { useWallet } from "../genlayer/wallet";
 import { PledgeError, classifyError } from "../utils/errors";
@@ -89,6 +89,7 @@ async function mergeFresh(qc: ReturnType<typeof useQueryClient>, contract: Patch
 export type WriteVars =
   | { kind: "create"; input: CreatePledgeInput; bond: bigint }
   | { kind: "bond"; pledgeId: string; value: bigint }
+  | { kind: "verify"; pledgeId: string }
   | { kind: "file"; pledgeId: string; advisory: string }
   | { kind: "contest"; claimId: string; statementUrl: string }
   | { kind: "settle"; claimId: string }
@@ -96,11 +97,12 @@ export type WriteVars =
 
 export const WRITE_LABEL: Record<TxKind, string> = {
   create: "Create pledge",
-  bond: "Add to bond",
+  bond: "Back the pledge",
+  verify: "Check the maintainer",
   file: "Report a breach",
   contest: "Contest",
   settle: "Settle",
-  withdraw: "Withdraw bond",
+  withdraw: "Close the pledge",
 };
 
 const verdictNote = (v: unknown) => {
@@ -153,15 +155,23 @@ export function usePledgeWrite() {
             break;
           case "bond": {
             const p = await contract.getPledge(vars.pledgeId);
-            if (!sameAddress(p.pledger, address)) refuse("Only the pledger can add to this bond.");
             if (p.state !== "active") refuse("This pledge is closed.");
-            result = await contract.addBond(vars.pledgeId, vars.value, onProgress);
+            if (todayUtc() > p.coverage_end) refuse(`Coverage ended on ${p.coverage_end}; the pledge can no longer be backed.`);
+            result = await contract.backPledge(vars.pledgeId, vars.value, onProgress);
+            note = "You are a backer: whatever is left of the bond comes back to you pro rata when the pledge closes.";
+            break;
+          }
+          case "verify": {
+            result = await contract.verifyMaintainer(vars.pledgeId, onProgress);
+            note = `Maintainer check: ${MAINTAINER_TEXT[String(result.returned) as keyof typeof MAINTAINER_TEXT] ?? String(result.returned)}.`;
             break;
           }
           case "file": {
             const p = await contract.getPledge(vars.pledgeId);
             if (p.state !== "active") refuse("This pledge is closed.");
-            if (wei(p.bond) === 0n) refuse("This pledge has no bond left.");
+            const cov = coverageOf(p);
+            if (cov.left <= 0) refuse(`This pledge has paid its maximum of ${String(p.max_payouts)} breaches.`);
+            if (cov.free <= 0) refuse("Every remaining payout is reserved by open claims; try again when one is settled.");
             result = await contract.fileBreach(vars.pledgeId, vars.advisory, stakeFor(p), onProgress);
             claimId = typeof result.returned === "string" ? result.returned : undefined;
             if (claimId) {
@@ -202,10 +212,10 @@ export function usePledgeWrite() {
           }
           case "withdraw": {
             const p = await contract.getPledge(vars.pledgeId);
-            if (!sameAddress(p.pledger, address)) refuse("Only the pledger can withdraw the bond.");
             if (todayUtc() < withdrawAfter(p)) refuse(`The bond stays locked until ${withdrawAfter(p)}.`);
             if (wei(p.pending) > 0n) refuse("Settle the open claims first.");
-            result = await contract.withdraw(vars.pledgeId, onProgress);
+            result = await contract.closePledge(vars.pledgeId, onProgress);
+            note = "The pledge is closed: what was left of the bond went back to its backers pro rata.";
             break;
           }
         }

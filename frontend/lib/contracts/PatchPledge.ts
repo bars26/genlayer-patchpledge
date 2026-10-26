@@ -55,8 +55,10 @@ export function executionOutcome(receipt: any): { result: string; message: strin
 
 const WRITE_EFFECT: Record<string, string> = {
   create_pledge: "no pledge was created",
-  add_bond: "the bond was not changed",
-  file_breach: "no claim was recorded (validators may have failed to read OSV or to agree)",
+  back_pledge: "the bond was not changed",
+  verify_maintainer: "the maintainer check was not recorded",
+  close_pledge: "the pledge was not closed",
+  file_breach: "no claim was recorded (validators may have failed to read the sources or to agree)",
   contest: "the contest was not recorded",
   settle: "nothing was paid or returned",
   withdraw: "the bond was not withdrawn",
@@ -69,6 +71,7 @@ export interface CreatePledgeInput {
   slaDays: number;
   scope: string;
   payout: bigint;
+  maxPayouts: number;
   beneficiary: string;
   coverageStart: string;
   coverageEnd: string;
@@ -112,13 +115,16 @@ class PatchPledge {
   createPledge(p: CreatePledgeInput, bondWei: bigint, onProgress?: (p: TxProgress) => void) {
     return this.write(
       "create_pledge",
-      [p.ecosystem, p.package, p.minSeverity, p.slaDays, p.scope, p.payout, p.beneficiary, p.coverageStart, p.coverageEnd],
+      [p.ecosystem, p.package, p.minSeverity, p.slaDays, p.scope, p.payout, p.maxPayouts, p.beneficiary, p.coverageStart, p.coverageEnd],
       bondWei,
       onProgress
     );
   }
-  addBond(id: string, valueWei: bigint, onProgress?: (p: TxProgress) => void) {
-    return this.write("add_bond", [id], valueWei, onProgress);
+  backPledge(id: string, valueWei: bigint, onProgress?: (p: TxProgress) => void) {
+    return this.write("back_pledge", [id], valueWei, onProgress);
+  }
+  verifyMaintainer(id: string, onProgress?: (p: TxProgress) => void) {
+    return this.write("verify_maintainer", [id], 0n, onProgress);
   }
   fileBreach(id: string, advisory: string, stakeWei: bigint, onProgress?: (p: TxProgress) => void) {
     return this.write("file_breach", [id, advisory], stakeWei, onProgress);
@@ -129,8 +135,8 @@ class PatchPledge {
   settle(claimId: string, onProgress?: (p: TxProgress) => void) {
     return this.write("settle", [claimId], 0n, onProgress);
   }
-  withdraw(id: string, onProgress?: (p: TxProgress) => void) {
-    return this.write("withdraw", [id], 0n, onProgress);
+  closePledge(id: string, onProgress?: (p: TxProgress) => void) {
+    return this.write("close_pledge", [id], 0n, onProgress);
   }
 
   /**

@@ -17,7 +17,7 @@ const STEPS = [
   {
     icon: Scale,
     title: "3. Validators rule",
-    body: "GenLayer validators each read the advisory from OSV and the release dates from the registry, and must agree. Every ruling comes with its reason.",
+    body: "GenLayer validators each read the advisory from OSV and GitHub and the release dates from two sources, and must agree. Every ruling comes with its reason.",
   },
   {
     icon: BadgeCheck,
@@ -67,7 +67,8 @@ export function Intro() {
           <div className="brand-card p-4 text-sm space-y-2">
             <p className="font-semibold">Who is who</p>
             <ul className="space-y-1.5 text-muted-foreground">
-              <li><strong className="text-foreground">Pledger</strong> · bonds the GEN and makes the promise (the maintainer or a sponsor).</li>
+              <li><strong className="text-foreground">Pledger</strong> · bonds the GEN and makes the promise (a verified maintainer or a sponsor).</li>
+              <li><strong className="text-foreground">Backer</strong> · a company that depends on the package and adds GEN; gets its share back at closing.</li>
               <li><strong className="text-foreground">Reporter</strong> · anyone who spots a missed deadline and files it.</li>
               <li><strong className="text-foreground">Beneficiary</strong> · the wallet a broken promise pays, chosen by the pledger.</li>
             </ul>

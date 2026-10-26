@@ -1,6 +1,7 @@
 /**
  * Preview of the ruling a claim would get, computed the same way the contract's coded checks
- * work (OSV record + deps.dev release dates), so a reporter sees it before staking GEN.
+ * work (OSV and GitHub advisories, deps.dev release dates confirmed by a second source), so a
+ * reporter sees it before staking GEN.
  *
  * It cannot predict the validators' scope judgment: when a pledge has a written scope and the
  * deadline was missed, the preview says the scope step will run. Not cached per user; the OSV and
@@ -42,28 +43,51 @@ export async function GET(req: Request) {
   const out = (verdict: string, code: string, extra: Record<string, unknown> = {}) =>
     Response.json({ verdict, code, facts, ...extra }, { headers: { "Cache-Control": "public, s-maxage=300" } });
 
-  const osv = await getJson(`https://api.osv.dev/v1/vulns/${advisory}`);
-  if (osv.status === 404) return out("NOT_COVERED", "not_found");
-  if (osv.status !== 200 || osv.data?.id !== advisory) return out("UNCLEAR", "osv_unreachable");
-  facts.summary = String(osv.data.summary || "").slice(0, 200);
-  if (osv.data.withdrawn) return out("NOT_COVERED", "withdrawn");
+  // Two advisory databases, as in the contract: "not found" only when both say so, any other failure decides nothing.
+  const [osv, gh] = await Promise.all([getJson(`https://api.osv.dev/v1/vulns/${advisory}`), getJson(`https://api.github.com/advisories/${advisory}`)]);
+  const okO = osv.status === 200 && osv.data?.id === advisory;
+  const okG = gh.status === 200 && gh.data?.ghsa_id === advisory;
+  if (osv.status === 404 && gh.status === 404) return out("NOT_COVERED", "not_found");
+  if (!(okO || osv.status === 404) || !(okG || gh.status === 404)) return out("UNCLEAR", "osv_unreachable");
+  facts.advisory_sources = [okO && "OSV", okG && "GitHub"].filter(Boolean);
+  facts.summary = String((okO ? osv.data.summary : gh.data?.summary) || "").slice(0, 200);
+  if ((okO && osv.data.withdrawn) || (okG && gh.data.withdrawn_at)) return out("NOT_COVERED", "withdrawn");
   const fixed = new Set<string>();
+  const published: number[] = [];
   let listed = false;
-  for (const a of osv.data.affected || []) {
-    if (a.package?.ecosystem !== eco || normName(eco, String(a.package?.name || "")) !== normName(eco, pkg)) continue;
-    listed = true;
-    for (const r of a.ranges || []) if (r.type === "ECOSYSTEM" || r.type === "SEMVER") for (const e of r.events || []) if (e.fixed) fixed.add(String(e.fixed));
+  if (okO) {
+    for (const a of osv.data.affected || []) {
+      if (a.package?.ecosystem !== eco || normName(eco, String(a.package?.name || "")) !== normName(eco, pkg)) continue;
+      listed = true;
+      for (const r of a.ranges || []) if (r.type === "ECOSYSTEM" || r.type === "SEMVER") for (const e of r.events || []) if (e.fixed) fixed.add(String(e.fixed));
+    }
+    facts.severity_osv = String(osv.data.database_specific?.severity || "").toUpperCase();
+    const t = Date.parse(String(osv.data.published || "").slice(0, 19) + "Z");
+    if (!Number.isNaN(t)) published.push(t);
   }
-  if (!listed) return out("NOT_COVERED", "package", { listed: [...new Set((osv.data.affected || []).map((a: any) => `${a.package?.ecosystem}:${a.package?.name}`))] });
-  facts.severity = String(osv.data.database_specific?.severity || "").toUpperCase();
-  if (!(String(facts.severity) in SEVERITY_RANK)) return out("UNCLEAR", "no_severity");
-  if (SEVERITY_RANK[String(facts.severity)] < SEVERITY_RANK[minSeverity]) return out("NOT_COVERED", "severity");
-  const published = Date.parse(String(osv.data.published || "").slice(0, 19) + "Z");
-  if (Number.isNaN(published)) return out("UNCLEAR", "osv_unreachable");
-  facts.published = iso(published);
-  const day = iso(published).slice(0, 10);
+  if (okG) {
+    for (const v of gh.data.vulnerabilities || []) {
+      const e = { npm: "npm", pip: "PyPI" }[String(v?.package?.ecosystem || "")];
+      if (e !== eco || normName(eco, String(v?.package?.name || "")) !== normName(eco, pkg)) continue;
+      listed = true;
+      if (v.first_patched_version) fixed.add(String(v.first_patched_version));
+    }
+    facts.severity_github = String(gh.data.severity || "").toUpperCase();
+    const t = Date.parse(String(gh.data.published_at || "").slice(0, 19) + "Z");
+    if (!Number.isNaN(t)) published.push(t);
+  }
+  if (!listed) return out("NOT_COVERED", "package", { listed: okO ? [...new Set((osv.data.affected || []).map((a: any) => `${a.package?.ecosystem}:${a.package?.name}`))] : [] });
+  const ratings = [...new Set([facts.severity_osv, facts.severity_github].filter((r) => String(r) in SEVERITY_RANK))] as string[];
+  if (ratings.length > 1) return out("UNCLEAR", "severity_disagrees");
+  if (!ratings.length) return out("UNCLEAR", "no_severity");
+  facts.severity = ratings[0];
+  if (SEVERITY_RANK[ratings[0]] < SEVERITY_RANK[minSeverity]) return out("NOT_COVERED", "severity");
+  if (!published.length) return out("UNCLEAR", "osv_unreachable");
+  const pub = Math.max(...published); // the later date: the more lenient deadline
+  facts.published = iso(pub);
+  const day = iso(pub).slice(0, 10);
   if (day < start || day > end) return out("NOT_COVERED", "date");
-  const deadline = published + sla * DAY;
+  const deadline = pub + sla * DAY;
   facts.deadline = iso(deadline);
   // Every reported fix counts: one deps.dev request lists all versions of the package with dates.
   const versions = [...fixed].sort();
@@ -98,6 +122,22 @@ export async function GET(req: Request) {
   if (first) {
     facts.first_fix = first;
     facts.first_fix_at = iso(dates[first]);
+  }
+  if (first) {
+    // The deciding release date must be confirmed by a second source: PyPI itself, or ecosyste.ms for npm.
+    const url =
+      system === "pypi"
+        ? `https://pypi.org/pypi/${enc(pkg)}/${enc(first)}/json`
+        : `https://packages.ecosyste.ms/api/v1/registries/npmjs.org/packages/${enc(pkg)}/versions/${enc(first)}`;
+    const r = await getJson(url);
+    const times =
+      system === "pypi"
+        ? (r.data?.urls || []).map((u: any) => Date.parse(String(u?.upload_time_iso_8601 || "").slice(0, 19) + "Z")).filter((t: number) => !Number.isNaN(t))
+        : [Date.parse(String(r.data?.published_at || "").slice(0, 19) + "Z")].filter((t: number) => !Number.isNaN(t));
+    facts.second_source = system === "pypi" ? "PyPI" : "ecosyste.ms";
+    if (r.status !== 200 || !times.length) return out("UNCLEAR", "second_source_unreachable");
+    facts.second_fix_at = iso(Math.min(...times));
+    if (Math.abs(Math.min(...times) - dates[first]) > DAY) return out("UNCLEAR", "dates_disagree");
   }
   if (first && dates[first] <= deadline) return out("KEPT", "fixed_in_time");
   if (failed) return out("UNCLEAR", "registry_unreachable");

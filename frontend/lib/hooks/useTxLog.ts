@@ -2,7 +2,7 @@
 
 import { useSyncExternalStore } from "react";
 
-export type TxKind = "create" | "bond" | "file" | "contest" | "settle" | "withdraw";
+export type TxKind = "create" | "bond" | "verify" | "file" | "contest" | "settle" | "withdraw";
 export type TxState = "estimating" | "awaiting_wallet" | "confirming" | "accepted" | "failed";
 
 export interface TxEntry {

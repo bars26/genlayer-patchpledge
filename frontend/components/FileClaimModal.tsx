@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { FileWarning, Loader2, Search } from "lucide-react";
-import { CODE_LABEL, GHSA_RE, formatGen, parseJson, stakeFor, type Claim, type Pledge, type Verdict } from "@/lib/contracts/types";
+import { coverageOf, CODE_LABEL, GHSA_RE, formatGen, parseJson, stakeFor, type Claim, type Pledge, type Verdict } from "@/lib/contracts/types";
 import { usePledgeWrite } from "@/lib/hooks/usePatchPledge";
 import { useWallet } from "@/lib/genlayer/wallet";
 import { VerdictBadge } from "./VerdictBadge";
@@ -34,7 +34,16 @@ export function FileClaimModal({ pledge, claims }: { pledge: Pledge; claims: Cla
   // The contract refunds these two cases; say so before anyone stakes.
   const alreadyPaid = parseJson<string[]>(pledge.paid_json, []).includes(id);
   const openClaim = claims.find((c) => c.state === "pending" && c.advisory === id);
-  const blocked = alreadyPaid ? "This advisory has already been paid from this pledge; filing it again would be refunded." : openClaim ? `${openClaim.id} is already open for this advisory; you can follow it on this card.` : "";
+  const cov = coverageOf(pledge);
+  const blocked = alreadyPaid
+    ? "This advisory has already been paid from this pledge; filing it again would be refunded."
+    : openClaim
+      ? `${openClaim.id} is already open for this advisory; you can follow it on this card.`
+      : cov.left <= 0
+        ? `This pledge has paid its maximum of ${String(pledge.max_payouts)} breaches.`
+        : cov.free <= 0
+          ? "Every remaining payout is reserved by open claims; try again when one is settled."
+          : "";
 
   const check = async () => {
     setChecking(true);

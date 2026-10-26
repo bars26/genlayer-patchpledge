@@ -11,11 +11,11 @@ import { useRegistry } from "@/lib/hooks/usePatchPledge";
 
 const RULES = [
   ["Not covered", "The advisory does not list this package, is below the severity floor, was published outside the coverage dates, or was withdrawn."],
-  ["Kept", "The first fixed version (from OSV) was released (per deps.dev) on or before publication + deadline. A fix shipped before the advisory went public counts."],
+  ["Kept", "The first fixed version (from OSV and GitHub) was released on or before publication + deadline, per deps.dev and confirmed by a second source (PyPI itself or ecosyste.ms). A fix shipped before the advisory went public counts."],
   ["Not due", "No fix yet, but the deadline has not passed. The contract refunds the reporter instead of opening a claim."],
   ["Breached", "The first fix came after the deadline, or the deadline passed with no fix. If the pledge has a written scope, validators first judge whether the advisory falls inside it."],
   ["Excused", "The deadline was missed, but validators judged the advisory outside the written scope, or the pledger's statement showed specifically why the package is not affected."],
-  ["Unclear", "OSV or a release date could not be read, or the scope could not be judged. Nothing is paid and the reporter's stake comes back."],
+  ["Unclear", "A source could not be read, two sources disagreed (severity, or the release date by more than a day), or the scope could not be judged. Nothing is paid and the reporter's stake comes back."],
 ];
 
 export default function HomePage() {
@@ -63,8 +63,9 @@ export default function HomePage() {
           <section className="mt-10 brand-card p-6 md:p-8">
             <h2 className="text-2xl font-bold mb-1">How a ruling is made</h2>
             <p className="text-sm text-muted-foreground mb-5 max-w-3xl">
-              Every validator fetches the advisory from <strong>OSV</strong> and the release date of each fixed version from <strong>deps.dev</strong>, applies the
-              same rules in code, and must reach exactly the same result. A language model is only asked one narrow question, and only when a deadline was
+              Every validator reads the advisory from <strong>OSV</strong> and the <strong>GitHub Advisory Database</strong>, the release date of each fixed version
+              from <strong>deps.dev</strong>, and confirms the deciding date with a second source (<strong>PyPI</strong> itself or <strong>ecosyste.ms</strong>). It applies the
+              same rules in code and must reach exactly the same result; when two sources disagree, nothing is decided. A language model is only asked one narrow question, and only when a deadline was
               missed and the pledge has a written scope or the pledger sent a statement: is this advisory inside what was promised?
             </p>
             <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4 text-sm">
@@ -86,14 +87,20 @@ export default function HomePage() {
               </div>
               <div>
                 <p className="font-semibold mb-1">Money</p>
-                <p className="text-muted-foreground">A breach pays the per-breach amount from the bond: 90% to the beneficiary, 10% plus the stake back to the reporter. Each advisory pays a pledge once. The bond is locked until coverage ends plus one full deadline.</p>
+                <p className="text-muted-foreground">A pledge pays at most a set number of breaches and its bond covers all of them, so every breach is paid in full: 90% to the beneficiary, 10% plus the stake to the reporter. Companies that depend on the package can back a pledge; at closing, what is left returns to every backer pro rata. The bond is locked until coverage ends plus one full deadline.</p>
+              </div>
+              <div>
+                <p className="font-semibold mb-1">Verified maintainer</p>
+                <p className="text-muted-foreground">Anyone can ask validators to check the package&apos;s GitHub repository (found through npm or PyPI) for a <span className="mono">.patchpledge</span> file listing the pledger&apos;s wallet. If it is there, the pledge is marked as made by a verified maintainer; otherwise it is a sponsor pledge.</p>
               </div>
             </div>
           </section>
         </div>
       </main>
       <footer className="border-t border-border py-4 text-center text-sm text-muted-foreground">
-        Data: <a href="https://osv.dev" target="_blank" rel="noopener noreferrer" className="hover:text-primary">OSV</a> and{" "}
+        Data: <a href="https://osv.dev" target="_blank" rel="noopener noreferrer" className="hover:text-primary">OSV</a>,{" "}
+        <a href="https://github.com/advisories" target="_blank" rel="noopener noreferrer" className="hover:text-primary">GitHub Advisory Database</a>,{" "}
+        <a href="https://ecosyste.ms" target="_blank" rel="noopener noreferrer" className="hover:text-primary">ecosyste.ms</a> and{" "}
         <a href="https://deps.dev" target="_blank" rel="noopener noreferrer" className="hover:text-primary">deps.dev</a>
         {" · "}
         <a href="https://genlayer.com" target="_blank" rel="noopener noreferrer" className="hover:text-primary">Built on GenLayer</a>

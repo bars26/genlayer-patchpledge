@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { Loader2, Plus } from "lucide-react";
-import { MIN_PAYOUT_WEI, SEVERITIES, formatGen, parseGen, todayUtc } from "@/lib/contracts/types";
+import { MAX_PAYOUTS, MIN_PAYOUT_WEI, SEVERITIES, formatGen, parseGen, todayUtc } from "@/lib/contracts/types";
 import { usePledgeWrite } from "@/lib/hooks/usePatchPledge";
 import { useWallet } from "@/lib/genlayer/wallet";
 import { Button } from "./ui/button";
@@ -31,7 +31,8 @@ export function CreatePledgeModal() {
     slaDays: "30",
     scope: "",
     payout: "2",
-    bond: "6",
+    maxPayouts: "2",
+    bond: "",
     beneficiary: "",
     coverageStart: todayUtc(),
     coverageEnd: yearFromNow(),
@@ -39,14 +40,17 @@ export function CreatePledgeModal() {
   const set = (k: keyof typeof f) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => setF({ ...f, [k]: e.target.value });
 
   const payout = parseGen(f.payout);
-  const bond = parseGen(f.bond);
+  const maxPayouts = Number(f.maxPayouts);
+  const minBond = payout && Number.isInteger(maxPayouts) && maxPayouts > 0 ? payout * BigInt(maxPayouts) : null;
+  const bond = f.bond ? parseGen(f.bond) : minBond;
   const pkg = f.ecosystem === "npm" ? f.package.trim().toLowerCase() : f.package.trim();
   const sla = Number(f.slaDays);
   const problems = [
     !(f.ecosystem === "npm" ? NPM_RE : PYPI_RE).test(pkg) && `Enter a valid ${f.ecosystem} package name.`,
     !(Number.isInteger(sla) && sla >= 1 && sla <= 365) && "The deadline must be 1 to 365 days.",
     !(payout && payout >= MIN_PAYOUT_WEI) && "The payout must be at least 1 GEN.",
-    !(bond && payout && bond >= payout) && "The bond must cover at least one payout.",
+    !(Number.isInteger(maxPayouts) && maxPayouts >= 1 && maxPayouts <= MAX_PAYOUTS) && `The pledge pays 1 to ${MAX_PAYOUTS} breaches at most.`,
+    !(bond && minBond && bond >= minBond) && "The bond must cover every payout: at least payout × maximum breaches.",
     !/^0x[0-9a-fA-F]{40}$/.test(f.beneficiary.trim()) && "Enter the beneficiary's wallet address.",
     f.coverageStart > f.coverageEnd && "Coverage must start before it ends.",
     f.coverageEnd < todayUtc() && "Coverage cannot end in the past.",
@@ -65,6 +69,7 @@ export function CreatePledgeModal() {
           slaDays: sla,
           scope: f.scope.trim(),
           payout,
+          maxPayouts,
           beneficiary: f.beneficiary.trim(),
           coverageStart: f.coverageStart,
           coverageEnd: f.coverageEnd,
@@ -88,8 +93,8 @@ export function CreatePledgeModal() {
         <DialogHeader>
           <DialogTitle>Make a patch pledge</DialogTitle>
           <DialogDescription>
-            Bond GEN behind a fix deadline for one package. You can be its maintainer or a sponsor who depends on it. The bond stays locked until the
-            coverage period and the last deadline have passed.
+            Bond GEN behind a fix deadline for one package. You can be its maintainer or a sponsor who depends on it. The bond covers every payout in
+            full and stays locked until the coverage period and the last deadline have passed. Others can back your pledge with more GEN.
           </DialogDescription>
         </DialogHeader>
         <div className="grid grid-cols-2 gap-3 text-sm">
@@ -121,8 +126,13 @@ export function CreatePledgeModal() {
             <Input value={f.payout} onChange={set("payout")} inputMode="decimal" />
           </div>
           <div className="space-y-1">
+            <Label>Pays at most (breaches)</Label>
+            <Input value={f.maxPayouts} onChange={set("maxPayouts")} inputMode="numeric" />
+          </div>
+          <div className="space-y-1 col-span-2">
             <Label>Bond (GEN)</Label>
-            <Input value={f.bond} onChange={set("bond")} inputMode="decimal" />
+            <Input value={f.bond} onChange={set("bond")} inputMode="decimal" placeholder={minBond ? formatGen(minBond) : ""} />
+            <p className="text-xs text-muted-foreground">At least payout × maximum breaches, so every breach is paid in full.</p>
           </div>
           <div className="space-y-1 col-span-2">
             <Label>Beneficiary wallet</Label>

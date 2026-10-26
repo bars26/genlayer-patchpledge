@@ -6,12 +6,14 @@ import {
   CODE_LABEL,
   OUTCOME_TEXT,
   advisoryUrl,
+  evidenceOf,
   facts as factsOf,
   formatGen,
   sameAddress,
   timeline as timelineOf,
   windowLeftSeconds,
   type Claim,
+  type EvidencePacket,
   type Pledge,
 } from "@/lib/contracts/types";
 import { usePledgeWrite } from "@/lib/hooks/usePatchPledge";
@@ -38,6 +40,7 @@ export function ClaimCard({ claim, pledge }: { claim: Claim; pledge: Pledge }) {
   const [statement, setStatement] = useState("");
   const f = factsOf(claim);
   const steps = timelineOf(claim);
+  const packets = evidenceOf(claim);
   const left = windowLeftSeconds(claim, now);
   const isPledger = sameAddress(pledge.pledger, address);
   const isReporter = sameAddress(claim.claimant, address);
@@ -80,11 +83,13 @@ export function ClaimCard({ claim, pledge }: { claim: Claim; pledge: Pledge }) {
       <details className="text-xs">
         <summary className="cursor-pointer text-muted-foreground hover:text-foreground">What the validators read</summary>
         <dl className="mt-2 grid grid-cols-2 sm:grid-cols-3 gap-x-4 gap-y-1">
-          <div><dt className="text-muted-foreground">Severity</dt><dd className="mono">{f.severity || "—"} (floor {f.min_severity})</dd></div>
-          <div><dt className="text-muted-foreground">Published (OSV)</dt><dd className="mono">{day(f.published)}</dd></div>
+          <div><dt className="text-muted-foreground">Sources</dt><dd className="mono">{f.advisory_sources?.join(" + ") || "—"}</dd></div>
+          <div><dt className="text-muted-foreground">Severity (OSV / GitHub)</dt><dd className="mono">{f.severity_osv || "—"} / {f.severity_github || "—"} (floor {f.min_severity})</dd></div>
+          <div><dt className="text-muted-foreground">Published (later of the two)</dt><dd className="mono">{day(f.published)}</dd></div>
           <div><dt className="text-muted-foreground">Deadline</dt><dd className="mono">{day(f.deadline)} ({f.sla_days} days)</dd></div>
           <div><dt className="text-muted-foreground">Fixed versions</dt><dd className="mono">{f.fixed_versions?.length ? f.fixed_versions.join(", ") + ((f.fixed_count ?? 0) > f.fixed_versions.length ? ` (+${(f.fixed_count ?? 0) - f.fixed_versions.length} more, all checked)` : "") : "none listed"}</dd></div>
-          <div><dt className="text-muted-foreground">First fix released</dt><dd className="mono">{f.first_fix ? `${f.first_fix} on ${day(f.first_fix_at)}` : "—"}</dd></div>
+          <div><dt className="text-muted-foreground">First fix released</dt><dd className="mono">{f.first_fix ? `${f.first_fix} on ${day(f.first_fix_at)} (deps.dev)` : "—"}</dd></div>
+          <div><dt className="text-muted-foreground">Confirmed by</dt><dd className="mono">{f.second_source ? `${f.second_source}: ${day(f.second_fix_at)}` : "—"}</dd></div>
           <div><dt className="text-muted-foreground">Scope check</dt><dd className="mono">{f.scope_answer || "not needed"}</dd></div>
         </dl>
         {claim.statement_url && (
@@ -92,6 +97,14 @@ export function ClaimCard({ claim, pledge }: { claim: Claim; pledge: Pledge }) {
             Pledger&apos;s statement:{" "}
             <a href={claim.statement_url} target="_blank" rel="noopener noreferrer" className="mono text-primary break-all hover:underline">{claim.statement_url}</a>
           </p>
+        )}
+        {packets.length > 0 && (
+          <div className="mt-3 space-y-2">
+            <p className="font-medium text-foreground">Evidence packets (one per assessment, stored on-chain)</p>
+            {packets.map((e, i) => (
+              <Packet key={i} n={i + 1} e={e} />
+            ))}
+          </div>
         )}
       </details>
 
@@ -149,6 +162,29 @@ export function ClaimCard({ claim, pledge }: { claim: Claim; pledge: Pledge }) {
             : "Only the reporter can contest or accept during the window. After it, anyone can settle."}
         </p>
       )}
+    </div>
+  );
+}
+
+/** What each source said in one assessment, with the hashes that commit to it. */
+function Packet({ n, e }: { n: number; e: EvidencePacket }) {
+  const hash = (h?: string) => <span className="mono">{h ? `${h.slice(0, 14)}…` : "—"}</span>;
+  const link = (href?: string, text?: string) =>
+    href ? <a href={href} target="_blank" rel="noopener noreferrer" className="text-primary break-all hover:underline">{text ?? href}</a> : "—";
+  return (
+    <div className="rounded-md border border-border bg-card p-2 space-y-1">
+      <p className="text-muted-foreground">#{n} read {e.read_at?.replace("T", " ")} UTC · packet {hash(e.packet_sha256)}</p>
+      {e.osv && (
+        <p>{link(e.osv.url, "OSV")} (HTTP {e.osv.status}) · {e.osv.severity || "—"} · published {day(e.osv.published)} · fixes {e.osv.fixed?.join(", ") || "none"} · {hash(e.osv.fields_sha256)}</p>
+      )}
+      {e.github && (
+        <p>{link(e.github.url, "GitHub Advisory DB")} (HTTP {e.github.status}) · {e.github.severity || "—"} · published {day(e.github.published)} · fixes {e.github.fixed?.join(", ") || "none"} · {hash(e.github.fields_sha256)}</p>
+      )}
+      {e.deps_dev && Object.keys(e.deps_dev.dates).length > 0 && (
+        <p>{link(e.deps_dev.url, "deps.dev")} release dates: {Object.entries(e.deps_dev.dates).map(([v, t]) => `${v} ${day(t)}`).join(", ")}</p>
+      )}
+      {e.second_source && <p>Second source: {link(e.second_source.url, e.second_source.version)} released {day(e.second_source.published) || "not readable"}</p>}
+      {e.statement && <p>Pledger statement {link(e.statement.url)} · {e.statement.chars} characters · {hash(e.statement.sha256)}</p>}
     </div>
   );
 }
