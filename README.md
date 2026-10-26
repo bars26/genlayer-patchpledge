@@ -64,6 +64,10 @@ Also refused on-chain in that run: a bond below payout × max_payouts, a claim w
 closing a pledge before coverage plus one deadline had passed. The contract's balance matched `totals()` at three points
 of the run, each read after every transfer had finalized.
 
+A MetaMask test from the live app on the v2 contract is recorded at the end of the same file: a pledge on eazy-logger
+with one payout bonded in full, backed from the app, a maintainer check (no `.patchpledge` file, so a sponsor pledge),
+the late fix reported and the breach conceded and paid in full.
+
 ## Rules (all in code except the scope question)
 
 | Ruling | When |

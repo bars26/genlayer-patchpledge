@@ -44,7 +44,7 @@ read once every transaction touching the contract had finalized (payouts and ref
 | claim open on P2, payout reserved | 15.40 | 0.30 | 15.70 | 15.70 | match |
 | P2 and P3 claims open | 27.60 | 0.50 | 28.10 | 28.10 | match |
 | end of run | 24.80 | 0.00 | 24.80 | 24.80 | match |
-| now (when this file was generated) | 24.80 | 0.00 | 24.80 | 24.80 | match |
+| now (when this file was generated) | 25.80 | 0.00 | 25.80 | 25.80 | match |
 
 ## Evidence packets
 
@@ -94,6 +94,19 @@ bystander  1.00 GEN
 backer     7.00 GEN
 ```
 
+## Wallet test from the live app
+
+MetaMask test from the production app (patchpledge-bars26.vercel.app) on the v2 contract: the tester pledges on eazy-logger with a single payout bonded in full, backs the pledge, asks validators to check the maintainer, reports the late-fixed advisory and concedes as the pledger. Wallet `0x4f80b5c475fced34fc9a07ffccf39e1adc1406bf`. All three transactions are FINALIZED with execution result SUCCESS.
+
+| Step | GEN sent | Result | Tx |
+|---|---|---|---|
+| Make a pledge: npm eazy-logger, HIGH and above within 30 days, payout 1 GEN, pays at most 1, bond 1 GEN (1 x payout), beneficiary = own wallet, coverage 2025-01-01 to 2026-12-31 | 1 GEN | pledge_6 | [`0xc17240ce…`](https://explorer-studio.genlayer.com/tx/0xc17240cedfbbbc74158cb0aa90f3a341593943e3cd0502906c3fe7c8b6793dab) |
+| Back this pledge with 1 GEN | 1 GEN | backed; bond 2 GEN, recorded per backer for the pro-rata return at closing | [`0xff8b91af…`](https://explorer-studio.genlayer.com/tx/0xff8b91afaf122ec73115594a21d8d0e37e2eab2ef2223cee54c2d76c6cc84abb) |
+| Check the maintainer |  | file_missing: validators followed npm to shakyshane/easy-logger, which has no .patchpledge file, so a sponsor pledge | [`0xf8cfcafa…`](https://explorer-studio.genlayer.com/tx/0xf8cfcafad9b7b518bad3b7781d0ee877487288c4fee4edc6efaddb325c4f30b5) |
+| Report a breach: GHSA-r7jx-5m6m-cpg9 | 0.1 GEN | claim_6 BREACHED (late_fix): first fix 4.1.0 released 2025-04-02, 26 days after the deadline, confirmed by deps.dev and ecosyste.ms | [`0xc05f0e71…`](https://explorer-studio.genlayer.com/tx/0xc05f0e719db3fed6a7a8bbbfca957ab7b03efccba5b01167746b6e13e4eadf83) |
+| Concede and pay now (pledger) |  | paid in full: 0.9 GEN to the beneficiary, 0.1 GEN reward + 0.1 GEN stake to the reporter (transfers 0x845d97cf…, 0xd0f4e7a9…); bond 1 GEN left for the backer at closing | [`0xe58c264a…`](https://explorer-studio.genlayer.com/tx/0xe58c264ae4f2a23acc2d182993f7a5da66ba80b4585c82a315ceb3d8f980489e) |
+
+On-chain reason for claim_6: undefined
 
 ## Every transaction
 
